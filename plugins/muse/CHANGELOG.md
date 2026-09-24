@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.3
 
 - `stop <id>` on a run that already finished says `Run <id> is already completed; nothing to stop.` (or failed, or cancelled) and leaves the record as it was. It used to fail with `No run found for "<id>"`, as if the run did not exist. An id that matches no run still fails that way.
 

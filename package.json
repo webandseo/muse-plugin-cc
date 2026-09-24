@@ -1,6 +1,6 @@
 {
   "name": "muse-code-plugin-cc",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": true,
   "type": "module",
   "description": "Use Meta's Muse Code from Claude Code to review code or delegate tasks.",
