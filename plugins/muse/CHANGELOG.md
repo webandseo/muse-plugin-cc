@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.2
 
 - A run whose processes are gone no longer shows as running forever. `runs`, `show`, `stop` and resume mark any queued or running run whose bridge and `muse` processes have all exited as failed ("no longer running"), and `runs <id> --wait` returns as soon as that happens instead of waiting out its timeout. `stop` on such a run says it had already ended rather than "process may still be running", and `/muse:delegate --resume` continues it instead of refusing with "still running". An interrupted foreground `/muse:review` or `/muse:delegate` used to leave one of these behind. Until now only the write-run guard retired dead records, and only write-capable ones.
 
