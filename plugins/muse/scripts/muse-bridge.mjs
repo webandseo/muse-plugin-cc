@@ -36,6 +36,7 @@ import {
   buildStatusSnapshot,
   filterJobsForSession,
   getSessionRuntimeStatus,
+  partitionActiveWriteRuns,
   readStoredJob,
   resolveCancelableJob,
   resolveJobKindLabel,
@@ -92,7 +93,7 @@ function printUsage() {
       "  node scripts/muse-bridge.mjs check [--json] [--probe] [--enable-review-gate|--disable-review-gate]",
       "  node scripts/muse-bridge.mjs review [--wait|--background] [--base <ref>] [--scope <auto|working-tree|branch>] [--model <model>] [--effort <effort>]",
       "  node scripts/muse-bridge.mjs critique [--wait|--background] [--base <ref>] [--scope <auto|working-tree|branch>] [--model <model>] [--effort <effort>] [focus text]",
-      "  node scripts/muse-bridge.mjs run [--background] [--write] [--worktree [--worktree-base <ref>]] [--image <path>] [--resume-last|--resume|--fresh] [--model <model|alias>] [--effort <effort>] [prompt]",
+      "  node scripts/muse-bridge.mjs run [--background] [--write] [--allow-concurrent] [--worktree [--worktree-base <ref>]] [--image <path>] [--resume-last|--resume|--fresh] [--model <model|alias>] [--effort <effort>] [prompt]",
       "  node scripts/muse-bridge.mjs transfer [--source <claude-jsonl>] [--condensed] [--json]",
       "  node scripts/muse-bridge.mjs sync-skills [--dry-run] [--force] [--json]",
       "  node scripts/muse-bridge.mjs runs [run-id] [--wait] [--timeout-ms <ms>] [--all] [--json]",
@@ -400,6 +401,32 @@ async function resolveLatestTrackedTaskThread(cwd, options = {}) {
   }
 
   return null;
+}
+
+/**
+ * Two write-capable runs in one checkout edit the same files at once. Refuse
+ * a new one while another is alive; retire records whose processes are gone
+ * (a killed worker, a closed terminal) so they do not block forever.
+ */
+function ensureNoConcurrentWriteRun(workspaceRoot) {
+  const { live, stale } = partitionActiveWriteRuns(sortJobsNewestFirst(listJobs(workspaceRoot)));
+  for (const job of stale) {
+    const errorMessage = "The run's bridge and Muse processes are no longer running; marked failed.";
+    appendLogLine(job.logFile, errorMessage);
+    claimJobTerminal(workspaceRoot, job.id, "failed", { errorMessage, phase: "failed", bridgePid: null });
+  }
+  const active = live[0];
+  if (!active) {
+    return;
+  }
+  throw new Error(
+    [
+      `Muse delegate run ${active.id} is still ${active.status} with write access in this repository, so a second write-capable run was not started.`,
+      `Wait for it: /muse:runs ${active.id} --wait`,
+      `Stop it:     /muse:stop ${active.id}`,
+      "Pass --allow-concurrent to start another one anyway."
+    ].join("\n")
+  );
 }
 
 async function executeReviewRun(request) {
@@ -1032,7 +1059,7 @@ async function handleReview(argv) {
 async function handleTask(argv) {
   const { options, positionals } = parseCommandInput(argv, {
     valueOptions: ["model", "effort", "cwd", "prompt-file", "image", "worktree-base"],
-    booleanOptions: ["json", "write", "resume-last", "resume", "fresh", "background", "stop-gate", "worktree"],
+    booleanOptions: ["json", "write", "resume-last", "resume", "fresh", "background", "stop-gate", "worktree", "allow-concurrent"],
     aliasMap: {
       m: "model",
       w: "worktree"
@@ -1067,6 +1094,10 @@ async function handleTask(argv) {
     stopGate
   });
 
+  if (write && !options["allow-concurrent"]) {
+    ensureNoConcurrentWriteRun(workspaceRoot);
+  }
+
   if (options.background) {
     ensureMuseAvailable(cwd);
     requireTaskRequest(prompt, resumeLast);
@@ -1094,6 +1125,14 @@ async function handleTask(argv) {
   }
 
   const job = buildTaskJob(workspaceRoot, taskMetadata, write, stopGate);
+  if (!options.json) {
+    // If the caller's shell gives up on us (Claude Code's Bash tool backgrounds
+    // a call after its timeout), this is how to find the run instead of
+    // starting it again.
+    process.stderr.write(
+      `[muse-cc] Tracking this run as ${job.id}. If this call is backgrounded or times out, use /muse:runs ${job.id} --wait instead of starting another run.\n`
+    );
+  }
   await runForegroundCommand(
     job,
     (progress) =>

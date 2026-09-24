@@ -21,8 +21,10 @@ Execution rules:
 - Default to a write-capable Muse run by adding `--write` unless the user explicitly asks for read-only behavior or only wants review, diagnosis, or research without edits.
 
 Command selection:
-- Use exactly one `run` invocation per delegate handoff.
-- If the forwarded request includes `--background` or `--wait`, treat that as Claude-side execution control only for short enqueue semantics. Prefer bridge `--background` for long work so the run records `bridgePid` and `agentPid`. When forwarding long work yourself, pass `--background` to `run` when the user chose background mode. Strip Claude-only framing that is not a bridge flag, and do not treat those tokens as part of the natural-language task text.
+- Use exactly one `run` invocation per delegate handoff, in one `Bash` call with the Bash tool's `timeout` parameter set to `600000` (the default 120000 is shorter than most Muse runs).
+- If that call is moved to the background, times out, or is interrupted, do not call `run` again. The run is still tracked by the bridge, and a second write-capable run would edit the same files concurrently. Return the background notice and the run id the bridge printed (`Tracking this run as run-...`) with `/muse:runs <run-id> --wait` and `/muse:stop <run-id>`, then stop.
+- `--wait` and `--background` are Claude-side execution flags; do not treat them as part of the natural-language task text. Never forward `--wait` to `run`; the bridge does not accept it. `--background` is the one the bridge supports: `run --background` queues a detached worker, records `bridgePid` and `agentPid`, and returns the run id at once. Pass it when the user chose background mode or the work is long.
+- If the bridge refuses because another write-capable run is still active in this repository, return its message as-is and stop. Add `--allow-concurrent` only when the user explicitly asked for parallel runs.
 - If the forwarded request includes `--model`, pass it through to `run`.
 - If the forwarded request includes `--effort`, pass it through to `run`.
 - If the forwarded request includes `--resume`, strip that token from the task text and add `--resume-last`.
@@ -41,4 +43,4 @@ Safety rules:
 - Preserve the user's task text as-is apart from stripping routing flags.
 - Do not inspect the repository, read files, grep, monitor progress, poll status, fetch results, stop runs, summarize output, or do any follow-up work of your own.
 - Return the stdout of the `run` command exactly as-is.
-- If the Bash call fails or Muse cannot be invoked, return nothing.
+- If the Bash call fails or Muse cannot be invoked, return nothing, except for the backgrounded or refused cases above.

@@ -70,9 +70,9 @@ function looksLikeMissingProcessMessage(text) {
   return /not found|no running instance|cannot find|does not exist|no such process/i.test(text);
 }
 
-function isZombieProcess(pid) {
+function isZombieProcess(pid, spawnSyncImpl = spawnSync) {
   try {
-    const result = spawnSync("ps", ["-p", String(pid), "-o", "stat="], {
+    const result = spawnSyncImpl("ps", ["-p", String(pid), "-o", "stat="], {
       encoding: "utf8",
       windowsHide: true
     });
@@ -89,19 +89,33 @@ function isZombieProcess(pid) {
   }
 }
 
-function processIsAlive(pid, killImpl) {
+/**
+ * Signal 0 answers "is this pid running" on every platform: ESRCH means gone,
+ * EPERM means alive but not ours. POSIX also asks `ps` so an unreaped zombie
+ * counts as dead. Windows has no zombies, and whatever `ps` is on PATH there
+ * (Git Bash ships one without `-o`) cannot answer for a native pid, so asking
+ * it made every live process look dead.
+ */
+export function isProcessAlive(pid, options = {}) {
+  if (!Number.isFinite(pid) || pid <= 0) {
+    return false;
+  }
+  const platform = options.platform ?? process.platform;
+  const killImpl = options.killImpl ?? process.kill.bind(process);
   try {
     killImpl(pid, 0);
   } catch (error) {
     if (error?.code === "ESRCH") {
       return false;
     }
-    if (error?.code === "EPERM" || error?.code === "EACCES") {
-      return !isZombieProcess(pid);
+    if (error?.code !== "EPERM" && error?.code !== "EACCES") {
+      throw error;
     }
-    throw error;
   }
-  return !isZombieProcess(pid);
+  if (platform === "win32") {
+    return true;
+  }
+  return !isZombieProcess(pid, options.spawnSyncImpl);
 }
 
 function tryKill(killImpl, pid, signal) {
@@ -128,7 +142,7 @@ export function terminateProcessTree(pid, options = {}) {
   const runCommandImpl = options.runCommandImpl ?? runCommand;
   const killImpl = options.killImpl ?? process.kill.bind(process);
   const isAliveImpl =
-    options.isAliveImpl ?? ((candidatePid) => processIsAlive(candidatePid, killImpl));
+    options.isAliveImpl ?? ((candidatePid) => isProcessAlive(candidatePid, { platform, killImpl }));
   const graceMs = options.graceMs ?? 200;
 
   if (platform === "win32") {

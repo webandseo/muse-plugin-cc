@@ -132,6 +132,24 @@ test("runtime skill only forwards run once and output skill forbids auto-fixing"
   assert.match(resultHandling, /Auto-applying fixes from a review is strictly forbidden/);
 });
 
+test("delegate forwarding uses a long Bash timeout, never re-runs run, and keeps --wait on the Claude side", () => {
+  const surfaces = {
+    agent: read("agents/muse-delegate.md"),
+    runtimeSkill: read("skills/muse-delegate-runtime/SKILL.md"),
+    delegate: read("commands/delegate.md")
+  };
+  for (const [name, source] of Object.entries(surfaces)) {
+    assert.match(source, /`timeout`[^\n]*`600000`/, `${name} must set the Bash tool timeout to 600000`);
+    assert.match(source, /moved to the background[^\n]*(do|must) not call `run` again/i, `${name} must forbid a second run call`);
+    assert.match(source, /never forward `--wait` to `run`/i, `${name} must keep --wait Claude-side`);
+    assert.match(source, /`run --background`/, `${name} must name the bridge's own --background`);
+  }
+  for (const [name, source] of Object.entries({ agent: surfaces.agent, runtimeSkill: surfaces.runtimeSkill })) {
+    assert.match(source, /another write-capable run is still active/i, `${name} must explain the bridge refusal`);
+  }
+  assert.doesNotMatch(surfaces.delegate, /Do not forward them to `run`/, "delegate.md must not forbid bridge --background");
+});
+
 test("manifests agree on the plugin name and version", () => {
   const plugin = JSON.parse(read(".claude-plugin/plugin.json"));
   const marketplace = JSON.parse(fs.readFileSync(path.join(ROOT, ".claude-plugin", "marketplace.json"), "utf8"));

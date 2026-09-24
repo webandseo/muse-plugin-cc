@@ -1,11 +1,14 @@
 import fs from "node:fs";
 
+import { isProcessAlive } from "./process.mjs";
 import { getConfig, listJobs, readJobFile, resolveJobFile } from "./state.mjs";
-import { SESSION_ID_ENV } from "./tracked-jobs.mjs";
+import { resolveJobKillTargets, SESSION_ID_ENV } from "./tracked-jobs.mjs";
 import { resolveWorkspaceRoot } from "./workspace.mjs";
 
 export const DEFAULT_MAX_STATUS_JOBS = 8;
 export const DEFAULT_MAX_PROGRESS_LINES = 4;
+// A background run is recorded as queued a moment before its worker pid is.
+const UNSTARTED_RUN_GRACE_MS = 60000;
 
 export function sortJobsNewestFirst(jobs) {
   return [...jobs].sort((left, right) => String(right.updatedAt ?? "").localeCompare(String(left.updatedAt ?? "")));
@@ -180,6 +183,31 @@ export function enrichJob(job, options = {}) {
     ...enriched,
     phase: enriched.phase ?? inferLegacyJobPhase(enriched, enriched.progressPreview)
   };
+}
+
+/**
+ * Queued or running write-capable delegate runs, split by whether any of
+ * their recorded processes (agent, bridge worker) is still alive. A run with
+ * no pid recorded yet counts as live for a short grace period.
+ */
+export function partitionActiveWriteRuns(jobs, options = {}) {
+  const isAlive = options.isAlive ?? isProcessAlive;
+  const now = options.now ?? Date.now();
+  const live = [];
+  const stale = [];
+  for (const job of jobs) {
+    if (job.jobClass !== "task" || !job.write || (job.status !== "queued" && job.status !== "running")) {
+      continue;
+    }
+    const pids = resolveJobKillTargets(job);
+    if (pids.length > 0) {
+      (pids.some((pid) => isAlive(pid)) ? live : stale).push(job);
+      continue;
+    }
+    const stamp = Date.parse(job.updatedAt ?? job.createdAt ?? "");
+    (Number.isFinite(stamp) && now - stamp < UNSTARTED_RUN_GRACE_MS ? live : stale).push(job);
+  }
+  return { live, stale };
 }
 
 export function readStoredJob(workspaceRoot, jobId) {

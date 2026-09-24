@@ -77,6 +77,58 @@ function bridge(args, cwd, env) {
   return runNode([SCRIPT, ...args], { cwd, env });
 }
 
+function execArgvs(logPath) {
+  if (!fs.existsSync(logPath)) {
+    return [];
+  }
+  return fs
+    .readFileSync(logPath, "utf8")
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line))
+    .filter((entry) => entry.argv?.[0] === "exec")
+    .map((entry) => entry.argv);
+}
+
+function startSleeper(cwd) {
+  const child = spawn(process.execPath, ["-e", "setInterval(()=>{}, 1000)"], {
+    cwd,
+    stdio: "ignore",
+    detached: process.platform !== "win32"
+  });
+  child.unref();
+  return child.pid;
+}
+
+function exitedPid() {
+  return Number(runNode(["-e", "process.stdout.write(String(process.pid))"]).stdout);
+}
+
+function seedTaskJob(repo, env, overrides = {}) {
+  return withEnv({ CLAUDE_PLUGIN_DATA: env.CLAUDE_PLUGIN_DATA }, () => {
+    const now = new Date().toISOString();
+    const job = {
+      id: generateJobId("run"),
+      kind: "task",
+      kindLabel: "delegate",
+      title: "Muse Code Delegate",
+      workspaceRoot: repo,
+      jobClass: "task",
+      summary: "write run already in flight",
+      status: "running",
+      phase: "editing",
+      write: true,
+      createdAt: now,
+      updatedAt: now,
+      ...overrides
+    };
+    writeJobFile(repo, job.id, job);
+    upsertJob(repo, job);
+    return job;
+  });
+}
+
 function lastExecArgv(logPath) {
   const lines = fs
     .readFileSync(logPath, "utf8")
@@ -304,6 +356,67 @@ test("run resolves model aliases and forwards --image", () => {
   const missing = bridge(["run", "--image", "nope.png", "look"], repo, env);
   assert.notEqual(missing.status, 0);
   assert.match(missing.stderr, /Image not found/);
+});
+
+test("run --write refuses to start while another write-capable run is alive", () => {
+  const { repo, env, fakeLog } = setup();
+  const bridgePid = startSleeper(repo);
+  try {
+    const active = seedTaskJob(repo, env, { bridgePid, pid: bridgePid });
+    for (const args of [
+      ["run", "--write", "make the change"],
+      ["run", "--write", "--background", "make the change"],
+      ["run", "--write", "--json", "make the change"]
+    ]) {
+      const refused = bridge(args, repo, env);
+      assert.notEqual(refused.status, 0, `${args.join(" ")} must be refused`);
+      assert.match(refused.stderr, new RegExp(`${active.id} is still running`));
+      assert.ok(refused.stderr.includes(`/muse:runs ${active.id} --wait`), refused.stderr);
+      assert.ok(refused.stderr.includes(`/muse:stop ${active.id}`), refused.stderr);
+    }
+    assert.deepEqual(execArgvs(fakeLog), [], "no muse exec may start while the other write run is alive");
+    withEnv({ CLAUDE_PLUGIN_DATA: env.CLAUDE_PLUGIN_DATA }, () => {
+      const jobs = listJobs(repo);
+      assert.equal(jobs.length, 1, "refused runs are not recorded");
+      assert.equal(jobs[0].status, "running", "the live run is left alone");
+    });
+
+    const readOnly = bridge(["run", "look around without editing"], repo, env);
+    assert.equal(readOnly.status, 0, readOnly.stderr);
+
+    const allowed = bridge(["run", "--write", "--allow-concurrent", "parallel on purpose"], repo, env);
+    assert.equal(allowed.status, 0, allowed.stderr);
+    assert.equal(execArgvs(fakeLog).length, 2);
+  } finally {
+    try {
+      process.kill(bridgePid, "SIGKILL");
+    } catch {
+    }
+  }
+});
+
+test("run --write retires a write-capable run whose processes are gone and starts", () => {
+  const { repo, env, fakeLog } = setup();
+  const deadPid = exitedPid();
+  const stale = seedTaskJob(repo, env, { bridgePid: deadPid, pid: deadPid, agentPid: exitedPid() });
+
+  const result = bridge(["run", "--write", "make the change"], repo, env);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(execArgvs(fakeLog).length, 1);
+  withEnv({ CLAUDE_PLUGIN_DATA: env.CLAUDE_PLUGIN_DATA }, () => {
+    const retired = listJobs(repo).find((job) => job.id === stale.id);
+    assert.equal(retired.status, "failed");
+    assert.match(retired.errorMessage, /no longer running/);
+  });
+});
+
+test("foreground run announces its run id for follow-up commands", () => {
+  const { repo, env } = setup();
+  const result = bridge(["run", "--write", "make the change"], repo, env);
+  assert.equal(result.status, 0, result.stderr);
+  const runId = withEnv({ CLAUDE_PLUGIN_DATA: env.CLAUDE_PLUGIN_DATA }, () => listJobs(repo)[0].id);
+  assert.ok(result.stderr.includes(`Tracking this run as ${runId}`), result.stderr);
+  assert.ok(result.stderr.includes(`/muse:runs ${runId} --wait`), result.stderr);
 });
 
 test("run --write --worktree runs Muse in an isolated worktree and reports it", () => {

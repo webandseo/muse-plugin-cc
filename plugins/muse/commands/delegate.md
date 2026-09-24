@@ -17,7 +17,7 @@ Execution mode:
 - If the request includes `--wait`, run the `muse:muse-delegate` subagent in the foreground.
 - If neither flag is present, default to foreground.
 - Prefer bridge `--background` for long or open-ended work so the run records both `bridgePid` (Node worker) and `agentPid` (muse child).
-- `--background` and `--wait` are execution flags for Claude Code. Do not forward them to `run`, and do not treat them as part of the natural-language task text.
+- `--background` and `--wait` are execution flags for Claude Code, not part of the natural-language task text. Never forward `--wait` to `run`; the bridge does not accept it. `--background` is the only one the bridge supports, as `run --background` (queue a detached worker, return the run id at once).
 - `--model` and `--effort` are runtime-selection flags. Preserve them for the forwarded `run` call, but do not treat them as part of the natural-language task text. Model aliases: `spark` → `muse-spark-1.3`, `contributor` → `muse-spark-1.3-contributor`.
 - `--worktree` makes Muse work in an isolated git worktree (branch `muse/session-<id>` under `.muse/worktrees/`) instead of the live checkout; the result reports the worktree path and how to diff, merge, or discard it. Preserve it for the forwarded `run` call. Also add it when the user asks for the work to be done "in a worktree", "on a branch", "in isolation", or "without touching my working tree".
 - `--image <path>` attaches a screenshot or image to the request (Muse's `--image`). Preserve it for the forwarded `run` call.
@@ -41,7 +41,8 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/muse-bridge.mjs" run-resume-candidate --json
 
 Operating rules:
 
-- The subagent is a thin forwarder only. It should use one `Bash` call to invoke `node "${CLAUDE_PLUGIN_ROOT}/scripts/muse-bridge.mjs" run ...` and return that command's stdout as-is.
+- The subagent is a thin forwarder only. It should use one `Bash` call, with the Bash tool's `timeout` set to `600000`, to invoke `node "${CLAUDE_PLUGIN_ROOT}/scripts/muse-bridge.mjs" run ...` and return that command's stdout as-is.
+- If that call is moved to the background or times out, the subagent must not call `run` again: the run is still tracked, and the bridge refuses a second write-capable run while one is alive. It returns the background notice and run id, and the user follows up with `/muse:runs <run-id> --wait` or `/muse:stop <run-id>`.
 - Return the Muse bridge stdout verbatim to the user.
 - Do not paraphrase, summarize, rewrite, or add commentary before or after it.
 - Do not ask the subagent to inspect files, monitor progress, poll `/muse:runs`, fetch `/muse:show`, call `/muse:stop`, summarize output, or do follow-up work of its own.
