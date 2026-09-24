@@ -1,17 +1,17 @@
 {
-  "name": "meta-muse-code",
+  "name": "webandseo-muse",
   "owner": {
-    "name": "rtravellin"
+    "name": "webandseo"
   },
   "metadata": {
     "description": "Muse Code ↔ Claude Code bridge plugins for review, critique, delegation, and session transfer.",
-    "version": "0.1.0"
+    "version": "0.2.0"
   },
   "plugins": [
     {
       "name": "muse",
       "description": "Use Meta's Muse Code from Claude Code to review code or delegate tasks.",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "author": {
         "name": "rtravellin"
       },

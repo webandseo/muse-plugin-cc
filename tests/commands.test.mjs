@@ -114,7 +114,10 @@ test("plugin surfaces use /muse names and the muse bridge, never codex or grok",
   for (const command of ["check", "review", "critique", "delegate", "transfer", "sync-skills", "runs", "show", "stop"]) {
     assert.match(readme, new RegExp(`### \`/muse:${command}\``));
   }
-  assert.match(readme, /plugin install muse@meta-muse-code/);
+  assert.match(readme, /plugin marketplace add webandseo\/muse-plugin-cc/);
+  assert.match(readme, /plugin install muse@webandseo-muse/);
+  assert.doesNotMatch(readme, /meta-muse-code/, "no install instruction may use the upstream marketplace name");
+  assert.match(readme, /fork of \[rtravellin\/muse-code-plugin-cc\]\(https:\/\/github\.com\/rtravellin\/muse-code-plugin-cc\)/);
   assert.match(readme, /^## Windows$/m);
 });
 
@@ -155,7 +158,8 @@ test("manifests agree on the plugin name and version", () => {
   const marketplace = JSON.parse(fs.readFileSync(path.join(ROOT, ".claude-plugin", "marketplace.json"), "utf8"));
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
   assert.equal(plugin.name, "muse");
-  assert.equal(marketplace.name, "meta-muse-code");
+  assert.equal(marketplace.name, "webandseo-muse");
+  assert.equal(marketplace.owner.name, "webandseo");
   const entry = marketplace.plugins.find((item) => item.name === "muse");
   assert.equal(entry.source, "./plugins/muse");
   assert.equal(entry.version, plugin.version);

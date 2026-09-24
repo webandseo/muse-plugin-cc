@@ -2,6 +2,8 @@
 
 Use Meta's [Muse Code](https://developer.meta.com/ai/products/muse-code/) from inside Claude Code: ask it for a review, hand it a task, or move a Claude session over to it.
 
+This is the webandseo fork of [rtravellin/muse-code-plugin-cc](https://github.com/rtravellin/muse-code-plugin-cc), with privacy and Windows fixes: no foreign personal context and no contributor model by default, no concurrent duplicate write runs, and a process check that works on Windows. See `plugins/muse/CHANGELOG.md`.
+
 Reviews and delegated work run as background jobs you can check on, stop, or resume, so a long Muse run does not hold up the Claude session that started it.
 
 ![Animated transcript of /muse:check, /muse:review, /muse:delegate --worktree, --resume, background runs, /muse:stop and /muse:transfer against Muse Code 1.3](docs/demo.svg)
@@ -35,13 +37,13 @@ Muse installs with `curl https://dev.meta.ai/install.sh | bash` on macOS and Lin
 Add the marketplace in Claude Code:
 
 ```bash
-/plugin marketplace add rtravellin/muse-code-plugin-cc
+/plugin marketplace add webandseo/muse-plugin-cc
 ```
 
 Install the plugin:
 
 ```bash
-/plugin install muse@meta-muse-code
+/plugin install muse@webandseo-muse
 ```
 
 Reload plugins:
@@ -61,11 +63,11 @@ Then run:
 From this repository root (the path must be absolute):
 
 ```bash
-claude plugin marketplace add /absolute/path/to/muse-code-plugin-cc
-claude plugin install muse@meta-muse-code
+claude plugin marketplace add /absolute/path/to/muse-plugin-cc
+claude plugin install muse@webandseo-muse
 ```
 
-Or, with Claude Code already open, use `/plugin`, add the local marketplace path, then install `muse@meta-muse-code`.
+Or, with Claude Code already open, use `/plugin`, add the local marketplace path, then install `muse@webandseo-muse`.
 
 After install you should see the slash commands below and the `muse:muse-delegate` subagent in `/agents`.
 
