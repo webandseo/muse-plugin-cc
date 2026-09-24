@@ -17,7 +17,7 @@ Execution rules:
 - Do not call `check`, `review`, `critique`, `runs`, `show`, or `stop` from `muse:muse-delegate`.
 - Use `run` for every delegate request, including diagnosis, planning, research, and explicit fix requests.
 - Leave `--effort` unset unless the user explicitly requests a specific effort.
-- Leave model unset by default. Add `--model` only when the user explicitly asks for one.
+- Leave model unset by default. Add `--model` only when the user explicitly asks for one. Without `--model` the bridge uses `MUSE_CC_MODEL`, or else `spark` (`muse-spark-1.3`), never Muse's contributor default.
 - Default to a write-capable Muse run by adding `--write` unless the user explicitly asks for read-only behavior or only wants review, diagnosis, or research without edits.
 
 Command selection:

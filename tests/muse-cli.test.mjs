@@ -19,6 +19,7 @@ import {
   parseStructuredOutput,
   parseWindowsSandboxCheck,
   readModelCatalog,
+  resolveModelSelection,
   resolveMuseBinary,
   resolveMuseRuntime,
   resolveMuseShimExecutable,
@@ -31,6 +32,44 @@ test("normalizeRequestedModel expands aliases and passes real ids through", () =
   assert.equal(normalizeRequestedModel("muse-spark-1.2"), "muse-spark-1.2");
   assert.equal(normalizeRequestedModel("  "), null);
   assert.equal(normalizeRequestedModel(undefined), null);
+});
+
+test("resolveModelSelection prefers --model, then MUSE_CC_MODEL, then the spark default", () => {
+  assert.deepEqual(resolveModelSelection("contributor", { MUSE_CC_MODEL: "spark-1.2" }), {
+    model: "muse-spark-1.3-contributor",
+    source: "flag",
+    requested: "contributor"
+  });
+  assert.deepEqual(resolveModelSelection(null, { MUSE_CC_MODEL: "contributor" }), {
+    model: "muse-spark-1.3-contributor",
+    source: "env",
+    requested: "contributor"
+  });
+  assert.deepEqual(resolveModelSelection(undefined, { MUSE_CC_MODEL: " muse-spark-9 " }), {
+    model: "muse-spark-9",
+    source: "env",
+    requested: "muse-spark-9"
+  });
+  assert.deepEqual(resolveModelSelection("  ", { MUSE_CC_MODEL: " " }), {
+    model: "muse-spark-1.3",
+    source: "default",
+    requested: "spark"
+  });
+  assert.equal(resolveModelSelection(null, {}).model, "muse-spark-1.3");
+});
+
+test("runHeadlessAgent always names a model so Muse's contributor default is never implied", async () => {
+  const binDir = makeTempDir();
+  const fake = installFakeMuse(binDir);
+  const cwd = makeTempDir();
+  const env = buildEnv(fake);
+  delete env.MUSE_CC_MODEL;
+
+  const byDefault = await runHeadlessAgent(cwd, { prompt: "check the thing", env });
+  assert.equal(byDefault.args[byDefault.args.indexOf("--model") + 1], "muse-spark-1.3");
+
+  const fromEnv = await runHeadlessAgent(cwd, { prompt: "check the thing", env: { ...env, MUSE_CC_MODEL: "contributor" } });
+  assert.equal(fromEnv.args[fromEnv.args.indexOf("--model") + 1], "muse-spark-1.3-contributor");
 });
 
 test("readModelCatalog reads Muse's cached catalog and skips hidden rows", () => {

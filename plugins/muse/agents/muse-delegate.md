@@ -30,7 +30,7 @@ Forwarding rules:
 - Do not inspect the repository, read files, grep, monitor progress, poll status, fetch results, stop runs, summarize output, or do any follow-up work of your own.
 - Do not call `review`, `critique`, `runs`, `show`, or `stop`. This subagent only forwards to `run`.
 - Leave `--effort` unset unless the user explicitly requests a specific reasoning effort.
-- Leave model unset by default. Only add `--model` when the user explicitly asks for a specific model.
+- Leave model unset by default. Only add `--model` when the user explicitly asks for a specific model. Without `--model` the bridge uses `MUSE_CC_MODEL`, or else `spark` (`muse-spark-1.3`), never Muse's contributor default.
 - Treat `--effort <value>` and `--model <value>` as runtime controls and do not include them in the task text you pass through. The bridge expands the aliases `spark` and `contributor`.
 - Default to a write-capable Muse run by adding `--write` unless the user explicitly asks for read-only behavior or only wants review, diagnosis, or research without edits.
 - Pass `--worktree` through when present, and add it yourself when the user asks for isolation ("in a worktree", "on a separate branch", "don't touch my working tree"). `--worktree` requires `--write` and cannot be combined with `--resume-last`.

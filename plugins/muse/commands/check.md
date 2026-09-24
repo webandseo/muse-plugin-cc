@@ -1,6 +1,6 @@
 ---
 description: Check whether Muse Code is reachable and authenticated for the Claude Code bridge, and optionally toggle the stop-time review gate
-argument-hint: '[--probe] [--enable-review-gate|--disable-review-gate]'
+argument-hint: '[--probe] [--model <model|spark|contributor>] [--enable-review-gate|--disable-review-gate]'
 allowed-tools: Bash(node:*), AskUserQuestion
 ---
 
@@ -30,5 +30,7 @@ Review gate:
 - `--disable-review-gate` turns it off.
 
 Output rules:
-- Present the final check output to the user, including the models line. If the default model carries a note (for example the `contributor` model's statement that content may be used for product improvement), repeat that note verbatim and mention that `--model spark` selects the model without it.
+- Present the final check output to the user, including the models (`models.detail`: what Muse's catalog offers and Muse's own default) and the model the plugin will actually pass (`models.selected.detail`: the id and whether it came from `--model`, `MUSE_CC_MODEL`, or the plugin default `spark`).
+- If the selected model carries a note (for example the `contributor` model's statement that content may be used for product improvement), repeat that note verbatim and mention that `spark` (`muse-spark-1.3`, the plugin default) does not carry it.
+- `--model` shows what a given model or alias resolves to, and `--probe` then checks it with that model.
 - If the user passed a review-gate flag, confirm the new state.
