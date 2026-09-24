@@ -1412,7 +1412,19 @@ async function handleCancel(argv) {
     );
     return;
   }
-  const { job } = resolveCancelableJob(cwd, reference, { env: process.env });
+  const { job, finished } = resolveCancelableJob(cwd, reference, { env: process.env });
+  if (finished) {
+    const payload = {
+      jobId: job.id,
+      status: job.status,
+      title: job.title,
+      killAttempted: false,
+      killDelivered: false,
+      alreadyTerminal: true
+    };
+    outputCommandResult(payload, `Run ${job.id} is already ${job.status}; nothing to stop.\n`, options.json);
+    return;
+  }
   const existing = readStoredJob(workspaceRoot, job.id) ?? job;
   const preClaimRecord = { ...job, ...existing };
   const killTargets = resolveJobKillTargets(preClaimRecord);
