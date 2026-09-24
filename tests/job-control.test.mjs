@@ -5,7 +5,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { makeTempDir, withEnv } from "./helpers.mjs";
-import { claimWriteSlot, partitionActiveWriteRuns } from "../plugins/muse/scripts/lib/job-control.mjs";
+import { claimWriteSlot, partitionActiveWriteRuns, retireDeadRuns } from "../plugins/muse/scripts/lib/job-control.mjs";
 import { listJobs, upsertJob } from "../plugins/muse/scripts/lib/state.mjs";
 
 const JOB_CONTROL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "plugins", "muse", "scripts", "lib", "job-control.mjs");
@@ -76,6 +76,28 @@ test("claimWriteSlot is not blocked by a write run whose processes are gone", ()
     const claim = claimWriteSlot(repo, newRun(repo, "run-next"), { isAlive: () => false });
     assert.equal(claim.claimed, true);
     assert.equal(claim.active, null);
+  });
+});
+
+test("retireDeadRuns marks every active run whose processes are gone as failed and leaves the rest alone", () => {
+  const repo = makeTempDir();
+  withEnv({ CLAUDE_PLUGIN_DATA: makeTempDir() }, () => {
+    const alive = new Set([101]);
+    const review = { jobClass: "review", kind: "review", write: false };
+    upsertJob(repo, { ...newRun(repo, "review-dead"), ...review, status: "running", bridgePid: 998, agentPid: 997 });
+    upsertJob(repo, { ...newRun(repo, "run-dead"), write: false, status: "running", bridgePid: 996 });
+    upsertJob(repo, { ...newRun(repo, "run-live"), status: "running", bridgePid: 999, agentPid: 101 });
+    upsertJob(repo, { ...newRun(repo, "run-done"), status: "completed", bridgePid: 995 });
+
+    const retired = retireDeadRuns(repo, { isAlive: (pid) => alive.has(pid) });
+
+    assert.deepEqual(retired.map((job) => job.id).sort(), ["review-dead", "run-dead"]);
+    const byId = Object.fromEntries(listJobs(repo).map((job) => [job.id, job]));
+    assert.equal(byId["review-dead"].status, "failed");
+    assert.match(byId["review-dead"].errorMessage, /no longer running/);
+    assert.equal(byId["run-dead"].status, "failed");
+    assert.equal(byId["run-live"].status, "running");
+    assert.equal(byId["run-done"].status, "completed");
   });
 });
 
