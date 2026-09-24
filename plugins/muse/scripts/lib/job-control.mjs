@@ -1,8 +1,8 @@
 import fs from "node:fs";
 
 import { isProcessAlive } from "./process.mjs";
-import { getConfig, listJobs, readJobFile, resolveJobFile, updateState } from "./state.mjs";
-import { resolveJobKillTargets, SESSION_ID_ENV } from "./tracked-jobs.mjs";
+import { claimJobTerminal, getConfig, listJobs, readJobFile, resolveJobFile, updateState } from "./state.mjs";
+import { appendLogLine, resolveJobKillTargets, SESSION_ID_ENV } from "./tracked-jobs.mjs";
 import { resolveWorkspaceRoot } from "./workspace.mjs";
 
 export const DEFAULT_MAX_STATUS_JOBS = 8;
@@ -186,17 +186,17 @@ export function enrichJob(job, options = {}) {
 }
 
 /**
- * Queued or running write-capable delegate runs, split by whether any of
- * their recorded processes (agent, bridge worker) is still alive. A run with
- * no pid recorded yet counts as live for a short grace period.
+ * Queued or running runs, split by whether any of their recorded processes
+ * (agent, bridge worker) is still alive. A run with no pid recorded yet
+ * counts as live for a short grace period.
  */
-export function partitionActiveWriteRuns(jobs, options = {}) {
+export function partitionActiveRuns(jobs, options = {}) {
   const isAlive = options.isAlive ?? isProcessAlive;
   const now = options.now ?? Date.now();
   const live = [];
   const stale = [];
   for (const job of jobs) {
-    if (job.jobClass !== "task" || !job.write || (job.status !== "queued" && job.status !== "running")) {
+    if (job.status !== "queued" && job.status !== "running") {
       continue;
     }
     const pids = resolveJobKillTargets(job);
@@ -208,6 +208,33 @@ export function partitionActiveWriteRuns(jobs, options = {}) {
     (Number.isFinite(stamp) && now - stamp < UNSTARTED_RUN_GRACE_MS ? live : stale).push(job);
   }
   return { live, stale };
+}
+
+export function partitionActiveWriteRuns(jobs, options = {}) {
+  return partitionActiveRuns(
+    jobs.filter((job) => job.jobClass === "task" && job.write),
+    options
+  );
+}
+
+/**
+ * Mark failed every queued or running run whose processes are gone (a killed
+ * bridge, an interrupted foreground run, a closed terminal), so status, wait,
+ * show and stop see that it ended instead of reporting it running forever.
+ * Returns the runs it retired.
+ */
+export function retireDeadRuns(workspaceRoot, options = {}) {
+  const { stale } = partitionActiveRuns(listJobs(workspaceRoot), options);
+  const retired = [];
+  for (const job of stale) {
+    const errorMessage = "The run's bridge and Muse processes are no longer running; marked failed.";
+    const claim = claimJobTerminal(workspaceRoot, job.id, "failed", { errorMessage, phase: "failed", bridgePid: null });
+    if (claim.claimed) {
+      appendLogLine(job.logFile, errorMessage);
+      retired.push(claim.job);
+    }
+  }
+  return retired;
 }
 
 /**

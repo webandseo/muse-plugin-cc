@@ -185,6 +185,8 @@ Shows running and recent Muse runs for the current repository.
 /muse:runs run-abc123 --wait
 ```
 
+A run whose bridge and `muse` processes are gone (an interrupted foreground run, a killed worker, a closed terminal) is marked failed the next time `runs`, `show` or `stop` looks at it, and `--wait` returns as soon as that happens instead of waiting out its timeout.
+
 ### `/muse:show`
 
 Shows the stored output of a finished run, including the Muse session ID.

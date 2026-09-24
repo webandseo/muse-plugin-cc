@@ -555,6 +555,91 @@ test("run --write retires a write-capable run whose processes are gone and start
   });
 });
 
+test("runs, runs --wait and show report a run whose processes are gone as failed", () => {
+  const { repo, env } = setup();
+  const deadPid = exitedPid();
+  const ghost = seedTaskJob(repo, env, {
+    id: generateJobId("review"),
+    kind: "review",
+    kindLabel: "review",
+    title: "Muse Code Review",
+    jobClass: "review",
+    write: false,
+    phase: "thinking",
+    summary: "review whose bridge was killed",
+    bridgePid: deadPid,
+    pid: deadPid,
+    agentPid: exitedPid()
+  });
+  const live = seedTaskJob(repo, env, { write: false, summary: "read-only run still going", bridgePid: process.pid, pid: process.pid });
+
+  const listed = bridge(["runs", "--json"], repo, env);
+  assert.equal(listed.status, 0, listed.stderr);
+  assert.deepEqual(JSON.parse(listed.stdout).running.map((job) => job.id), [live.id]);
+
+  const waited = bridge(["runs", ghost.id, "--json", "--wait", "--timeout-ms", "20000"], repo, env);
+  assert.equal(waited.status, 0, waited.stderr);
+  const payload = JSON.parse(waited.stdout);
+  assert.equal(payload.waitTimedOut, false, "--wait must not sit out its timeout on a dead run");
+  assert.equal(payload.job.status, "failed");
+  assert.match(payload.job.errorMessage, /no longer running/);
+
+  const shown = bridge(["show", ghost.id, "--json"], repo, env);
+  assert.equal(shown.status, 0, shown.stderr);
+  assert.equal(JSON.parse(shown.stdout).job.status, "failed");
+
+  const status = bridge(["runs", live.id, "--json"], repo, env);
+  assert.equal(JSON.parse(status.stdout).job.status, "running", "a run with a live process is left alone");
+});
+
+test("runs --wait notices when the run's processes die while it waits", async () => {
+  const { repo, env } = setup();
+  const bridgePid = startSleeper(repo);
+  try {
+    const job = seedTaskJob(repo, env, { write: false, bridgePid, pid: bridgePid });
+    const waiting = bridgeAsync(
+      ["runs", job.id, "--json", "--wait", "--timeout-ms", "30000", "--poll-interval-ms", "200"],
+      repo,
+      env
+    );
+    // Long enough for the bridge to be polling, so the death happens mid-wait.
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+    process.kill(bridgePid, "SIGKILL");
+
+    const waited = await waiting;
+    assert.equal(waited.status, 0, waited.stderr);
+    const payload = JSON.parse(waited.stdout);
+    assert.equal(payload.waitTimedOut, false, "--wait must stop waiting once the run's processes are gone");
+    assert.equal(payload.job.status, "failed");
+  } finally {
+    try {
+      process.kill(bridgePid, "SIGKILL");
+    } catch {
+    }
+  }
+});
+
+test("stop on a run whose processes are gone says it had already ended", () => {
+  const { repo, env } = setup();
+  const seedGhost = () => {
+    const deadPid = exitedPid();
+    return seedTaskJob(repo, env, { bridgePid: deadPid, pid: deadPid, agentPid: exitedPid() });
+  };
+
+  const first = seedGhost();
+  const stopped = bridge(["stop", first.id, "--json"], repo, env);
+  assert.equal(stopped.status, 0, stopped.stderr);
+  const payload = JSON.parse(stopped.stdout);
+  assert.equal(payload.status, "failed");
+  assert.equal(payload.alreadyTerminal, true);
+
+  const second = seedGhost();
+  const text = bridge(["stop", second.id], repo, env);
+  assert.equal(text.status, 0, text.stderr);
+  assert.match(text.stdout, /already ended/);
+  assert.doesNotMatch(text.stdout, /may still be running/);
+});
+
 test("foreground run announces its run id for follow-up commands", () => {
   const { repo, env } = setup();
   const result = bridge(["run", "--write", "make the change"], repo, env);
@@ -629,6 +714,23 @@ test("run --resume-last continues the previous delegate session id", () => {
   assert.match(payload.rawOutput, /ZEBRA-42/);
   const argv = lastExecArgv(fakeLog);
   assert.equal(argv[argv.indexOf("--session-id") + 1], firstThread);
+});
+
+test("run --resume-last continues a delegate run whose processes died mid-run", () => {
+  const { repo, env, fakeLog } = setup();
+  const deadPid = exitedPid();
+  const threadId = "5d0c6a52-0000-4000-8000-00000000abcd";
+  seedTaskJob(repo, env, { write: false, threadId, bridgePid: deadPid, pid: deadPid, agentPid: exitedPid() });
+
+  const candidate = bridge(["run-resume-candidate", "--json"], repo, env);
+  assert.equal(candidate.status, 0, candidate.stderr);
+  assert.equal(JSON.parse(candidate.stdout).candidate?.threadId, threadId, "the interrupted run is offered for resume");
+
+  const resumed = bridge(["run", "--json", "--resume-last", "continue"], repo, env);
+  assert.equal(resumed.status, 0, resumed.stderr);
+  assert.equal(JSON.parse(resumed.stdout).resumed, true);
+  const argv = lastExecArgv(fakeLog);
+  assert.equal(argv[argv.indexOf("--session-id") + 1], threadId);
 });
 
 test("run --resume-last without history fails clearly", () => {
