@@ -592,6 +592,28 @@ test("runs, runs --wait and show report a run whose processes are gone as failed
   assert.equal(JSON.parse(status.stdout).job.status, "running", "a run with a live process is left alone");
 });
 
+test("stop on a run that already finished says so, and an unknown id still errors", () => {
+  const { repo, env } = setup();
+  const done = seedTaskJob(repo, env, { status: "completed", phase: "done" });
+
+  const text = bridge(["stop", done.id], repo, env);
+  assert.equal(text.status, 0, text.stderr);
+  assert.ok(text.stdout.includes(`${done.id} is already completed; nothing to stop`), text.stdout);
+
+  const json = bridge(["stop", done.id, "--json"], repo, env);
+  assert.equal(json.status, 0, json.stderr);
+  const payload = JSON.parse(json.stdout);
+  assert.equal(payload.status, "completed");
+  assert.equal(payload.alreadyTerminal, true);
+  withEnv({ CLAUDE_PLUGIN_DATA: env.CLAUDE_PLUGIN_DATA }, () => {
+    assert.equal(listJobs(repo).find((job) => job.id === done.id).status, "completed", "the record is left as it was");
+  });
+
+  const unknown = bridge(["stop", "run-does-not-exist"], repo, env);
+  assert.notEqual(unknown.status, 0);
+  assert.match(unknown.stderr, /No run found for "run-does-not-exist"/);
+});
+
 test("runs --wait notices when the run's processes die while it waits", async () => {
   const { repo, env } = setup();
   const bridgePid = startSleeper(repo);

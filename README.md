@@ -198,7 +198,7 @@ Shows the stored output of a finished run, including the Muse session ID.
 
 ### `/muse:stop`
 
-Stops a background run by terminating the bridge worker and the `muse` process tree.
+Stops a background run by terminating the bridge worker and the `muse` process tree. Given the id of a run that already finished, it says so and changes nothing.
 
 ```text
 /muse:stop
