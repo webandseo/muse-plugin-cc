@@ -47,6 +47,7 @@ function setup(options = {}) {
   delete env.XDG_DATA_HOME;
   delete env.MUSE_CC_SESSION_ID;
   delete env.MUSE_CC_FOREIGN_CONTEXT;
+  delete env.MUSE_CC_MODEL;
   return { repo, binDir, pluginDataDir, home, fake, fakeLog, env };
 }
 
@@ -342,6 +343,51 @@ test("MUSE_CC_FOREIGN_CONTEXT=1 lets Muse load foreign personal context again", 
   for (const argv of argvs) {
     assert.ok(!argv.includes("--no-foreign-personal-context"), argv.join(" "));
   }
+});
+
+test("every command defaults to muse-spark-1.3 when no model is given", () => {
+  for (const argv of runEveryExecPath(setup())) {
+    assert.ok(argv.includes("--model"), argv.join(" "));
+    assert.equal(argv[argv.indexOf("--model") + 1], "muse-spark-1.3", argv.join(" "));
+  }
+});
+
+test("MUSE_CC_MODEL takes aliases or full ids, and --model still wins", () => {
+  const { repo, env, fakeLog } = setup();
+  const modelOf = (args, extraEnv) => {
+    const result = bridge(args, repo, { ...env, ...extraEnv });
+    assert.equal(result.status, 0, result.stderr);
+    const argv = lastExecArgv(fakeLog);
+    return argv[argv.indexOf("--model") + 1];
+  };
+  assert.equal(modelOf(["review"], { MUSE_CC_MODEL: "contributor" }), "muse-spark-1.3-contributor");
+  assert.equal(modelOf(["run", "--write", "make the change"], { MUSE_CC_MODEL: "contributor" }), "muse-spark-1.3-contributor");
+  assert.equal(modelOf(["review"], { MUSE_CC_MODEL: "muse-spark-1.2" }), "muse-spark-1.2", "full ids pass through");
+  assert.equal(modelOf(["review", "--model", "spark"], { MUSE_CC_MODEL: "contributor" }), "muse-spark-1.3", "--model beats MUSE_CC_MODEL");
+});
+
+test("check reports which model the plugin will use and why", () => {
+  const { repo, env, fakeLog } = setup();
+  const byDefault = JSON.parse(bridge(["check", "--json"], repo, env).stdout);
+  assert.equal(byDefault.models.selected.id, "muse-spark-1.3");
+  assert.equal(byDefault.models.selected.source, "default");
+  assert.equal(byDefault.models.default, "muse-spark-1.3-contributor", "Muse's own default is still reported");
+  const text = bridge(["check"], repo, env).stdout;
+  assert.match(text, /- model: muse-spark-1\.3 \(plugin default/);
+
+  const fromEnv = JSON.parse(bridge(["check", "--json"], repo, { ...env, MUSE_CC_MODEL: "contributor" }).stdout);
+  assert.equal(fromEnv.models.selected.id, "muse-spark-1.3-contributor");
+  assert.equal(fromEnv.models.selected.source, "env");
+  assert.match(fromEnv.models.selected.detail, /MUSE_CC_MODEL=contributor/);
+  assert.match(fromEnv.models.selected.detail, /product improvement/, "the catalog note follows the selected model");
+
+  const fromFlag = bridge(["check", "--json", "--probe", "--model", "spark-1.2"], repo, { ...env, MUSE_CC_MODEL: "contributor" });
+  assert.equal(fromFlag.status, 0, fromFlag.stderr);
+  const flagPayload = JSON.parse(fromFlag.stdout);
+  assert.equal(flagPayload.models.selected.id, "muse-spark-1.2");
+  assert.equal(flagPayload.models.selected.source, "flag");
+  const argv = lastExecArgv(fakeLog);
+  assert.equal(argv[argv.indexOf("--model") + 1], "muse-spark-1.2", "the probe uses the selected model");
 });
 
 test("review rejects unsupported --effort values", () => {

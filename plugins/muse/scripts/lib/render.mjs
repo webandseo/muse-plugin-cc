@@ -179,6 +179,7 @@ export function renderSetupReport(report) {
     `- workspace: ${report.workspace?.root ?? "unknown"}`,
     `- auth: ${report.auth.detail}`,
     `- models: ${report.models?.detail ?? "unknown"}`,
+    ...(report.models?.selected ? [`- model: ${report.models.selected.detail}`] : []),
     ...(report.sandbox?.checked ? [`- windows sandbox: ${report.sandbox.detail}`] : []),
     `- git: ${report.git.detail}`,
     `- session runtime: ${report.sessionRuntime.label}`,

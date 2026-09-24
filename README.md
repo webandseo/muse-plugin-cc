@@ -86,11 +86,12 @@ Checks Node, the `muse` binary, authentication, the model catalog, and Git.
 ```text
 /muse:check
 /muse:check --probe
+/muse:check --model contributor
 /muse:check --enable-review-gate
 /muse:check --disable-review-gate
 ```
 
-`--probe` makes a one-step model call to confirm the login works. The review-gate flags control the `Stop` hook described under [Review gate](#review-gate). The models line lists what Muse's catalog offers and which model is the default. Meta's default, `muse-spark-1.3-contributor`, carries a catalog note saying your content may be used for product improvement; `--model spark` on any command picks `muse-spark-1.3`, which has no such note.
+`--probe` makes a one-step model call to confirm the login works. The review-gate flags control the `Stop` hook described under [Review gate](#review-gate). The models line lists what Muse's catalog offers and which model is Muse's own default. The model line shows the model the plugin will actually pass and why: `--model`, `MUSE_CC_MODEL`, or the plugin default. Meta's default, `muse-spark-1.3-contributor`, carries a catalog note saying your content may be used for product improvement, so the plugin never falls through to it: with no `--model` it uses `MUSE_CC_MODEL` if set, otherwise `spark` (`muse-spark-1.3`), which has no such note. `--model contributor` (or `MUSE_CC_MODEL=contributor`) still selects the contributor model on purpose. `--model` on `/muse:check` shows what a model or alias resolves to, and `--probe` then tests that model.
 
 ### `/muse:review`
 
@@ -103,7 +104,7 @@ Reviews your uncommitted changes, or your branch against a base with `--base <re
 /muse:review --wait --model muse-spark-1.3 --effort high
 ```
 
-The review runs `muse exec` with the shell and file writes disabled, so Muse can read the repository but not change it. The diff goes into the prompt up to 40 files or 512 KB; above that Muse gets the file list and reads what it needs. `--model` and `--effort` are optional and default to Muse's own `settings.json`. Efforts: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, `ultra`.
+The review runs `muse exec` with the shell and file writes disabled, so Muse can read the repository but not change it. The diff goes into the prompt up to 40 files or 512 KB; above that Muse gets the file list and reads what it needs. `--model` is optional and defaults to `MUSE_CC_MODEL`, or else `spark` (`muse-spark-1.3`); `--effort` is optional and defaults to Muse's own `settings.json`. Efforts: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, `ultra`.
 
 > [!NOTE]
 > A review of several files takes a few minutes. Run it in the background, then use `/muse:runs` and `/muse:show`.
@@ -145,7 +146,7 @@ Ask Muse to redesign the database connection to be more resilient.
 - `--worktree` runs Muse in its own git worktree: the bridge runs `git worktree add` for a branch named `muse/session-<id>` under `.muse/worktrees/`, hands it to Muse, and leaves it in place afterwards. Your checkout is untouched. The result prints the worktree path and the `diff`, `merge`, and discard commands for it. `--worktree-base <ref>` branches from something other than `HEAD`.
 - `--image <path>` attaches a screenshot or other image.
 - One write-capable delegate run at a time per repository: while one is still alive, a second is refused with the run id to follow (`/muse:runs <id> --wait`) or stop (`/muse:stop <id>`). A record whose processes have died is marked failed instead of blocking. `--allow-concurrent` starts a second one anyway.
-- `--model` takes a catalog id or one of the aliases `spark` (`muse-spark-1.3`), `contributor` (`muse-spark-1.3-contributor`), and `spark-1.2`.
+- `--model` takes a catalog id or one of the aliases `spark` (`muse-spark-1.3`), `contributor` (`muse-spark-1.3-contributor`), and `spark-1.2`. Without it the run uses `MUSE_CC_MODEL`, or else `spark`.
 - Every finished delegate run ends with a `muse resume <session-id>` line so you can pick the session up in Muse's own TUI; `/muse:runs` and `/muse:show` print it for reviews too.
 
 ### `/muse:transfer`
@@ -239,6 +240,7 @@ Each run:
 - writes the prompt to a temp file and passes `--prompt-file`, so prompts never go through shell quoting;
 - passes `--disable-approval --user-input-auto-resolve`, because nobody is there to answer prompts; the read-only flags are what keep a review from changing anything;
 - passes `--no-foreign-personal-context`, so Muse does not load your own `~/.claude` skills and personal rules into runs made for Claude Code (without it they go to Meta with every prompt); `MUSE_CC_FOREIGN_CONTEXT=1` turns this off;
+- always passes `--model`: the one you gave, else `MUSE_CC_MODEL`, else `spark` (`muse-spark-1.3`), so a run never lands on Muse's contributor default by omission;
 - sets a `--session-id`, which is what `--resume` and `muse resume` rely on;
 - writes Muse's JSONL events to a per-run log, which is where `/muse:runs` gets the phase (thinking, reading files, running a command, editing, verifying).
 
@@ -266,7 +268,7 @@ Each run:
 
 Two limits worth knowing before you rely on it. Reviews are a prompt the bridge sends, not a reviewer Muse ships, so their shape depends on the model rather than on a fixed command. And Muse's cross-session messaging refuses headless runs (`external_agent_ingress_closed`), so there is no way to redirect a turn while it is running; `/muse:stop` ends the process instead.
 
-To change the default model or effort, edit Muse's `settings.json` (`model`, `reasoning_effort`). The plugin only overrides them when you pass `--model` or `--effort`.
+To change the default model for the plugin, set `MUSE_CC_MODEL` (an alias such as `spark` or `contributor`, or a full catalog id); the plugin always passes `--model`, so the `model` key in Muse's `settings.json` does not apply to its runs. The default effort still comes from Muse's `settings.json` (`reasoning_effort`) unless you pass `--effort`.
 
 ## Windows
 
@@ -283,6 +285,7 @@ If your Muse lives inside WSL, run Claude Code inside WSL as well (the `claude` 
 | --- | --- |
 | `MUSE_BINARY` | Override for the `muse` executable |
 | `META_API_KEY` | Muse API key; takes priority over the `muse login` account |
+| `MUSE_CC_MODEL` | Model for runs without `--model`: an alias (`spark`, `contributor`, `spark-1.2`) or a full catalog id. Unset means `spark` (`muse-spark-1.3`); the plugin never falls through to Muse's `muse-spark-1.3-contributor` default |
 | `MUSE_CC_DISABLE_SANDBOX` | `1` passes `--disable-sandbox` to write-capable delegate runs on Windows (opt-in; see above) |
 | `MUSE_CC_FOREIGN_CONTEXT` | `1` stops passing `--no-foreign-personal-context`, so Muse loads your `~/.claude` skills and personal rules into bridge runs again (opt-out; off by default) |
 | `MUSE_CC_SESSION_ID` | Claude session id (set by the `SessionStart` hook) |

@@ -14,16 +14,19 @@ import { collectReviewContext, ensureGitRepository, resolveReviewTarget } from "
 import {
   buildReviewPrompt,
   DEFAULT_CONTINUE_PROMPT,
+  DEFAULT_MODEL_ALIAS,
   describeRuntime,
   DISABLE_SANDBOX_ENV,
   getMuseAuthStatus,
   getMuseAvailability,
   getWindowsSandboxStatus,
   MODEL_ALIASES,
+  MODEL_ENV,
   normalizeRequestedModel,
   parseStructuredOutput,
   readModelCatalog,
   readOutputSchema,
+  resolveModelSelection,
   resolveMuseRuntime,
   runHeadlessAgent,
   runSkillsImport,
@@ -90,7 +93,7 @@ function printUsage() {
   console.log(
     [
       "Usage:",
-      "  node scripts/muse-bridge.mjs check [--json] [--probe] [--enable-review-gate|--disable-review-gate]",
+      "  node scripts/muse-bridge.mjs check [--json] [--probe] [--model <model|alias>] [--enable-review-gate|--disable-review-gate]",
       "  node scripts/muse-bridge.mjs review [--wait|--background] [--base <ref>] [--scope <auto|working-tree|branch>] [--model <model>] [--effort <effort>]",
       "  node scripts/muse-bridge.mjs critique [--wait|--background] [--base <ref>] [--scope <auto|working-tree|branch>] [--model <model>] [--effort <effort>] [focus text]",
       "  node scripts/muse-bridge.mjs run [--background] [--write] [--allow-concurrent] [--worktree [--worktree-base <ref>]] [--image <path>] [--resume-last|--resume|--fresh] [--model <model|alias>] [--effort <effort>] [prompt]",
@@ -101,7 +104,8 @@ function printUsage() {
       "  node scripts/muse-bridge.mjs stop [run-id] [--json]",
       "",
       `Effort values: ${VALID_REASONING_EFFORTS.join(", ")}`,
-      `Model aliases: ${[...MODEL_ALIASES].map(([alias, model]) => `${alias} → ${model}`).join(", ")}`
+      `Model aliases: ${[...MODEL_ALIASES].map(([alias, model]) => `${alias} → ${model}`).join(", ")}`,
+      `Default model: ${DEFAULT_MODEL_ALIAS} (${normalizeRequestedModel(DEFAULT_MODEL_ALIAS)}) unless --model or ${MODEL_ENV} names another`
     ].join("\n")
   );
 }
@@ -195,13 +199,25 @@ function firstMeaningfulLine(text, fallback) {
   return line ?? fallback;
 }
 
-async function runAuthProbe(cwd) {
+function describeModelSource(selection) {
+  switch (selection.source) {
+    case "flag":
+      return `from --model ${selection.requested}`;
+    case "env":
+      return `from ${MODEL_ENV}=${selection.requested}`;
+    default:
+      return `plugin default \`${DEFAULT_MODEL_ALIAS}\`; set ${MODEL_ENV} or pass --model to change it`;
+  }
+}
+
+async function runAuthProbe(cwd, model) {
   const result = await runHeadlessAgent(cwd, {
     prompt: "Reply with exactly the single word OK and nothing else.",
     write: false,
     shell: false,
     webTools: false,
     trustWorkspace: false,
+    model,
     effort: "low",
     maxModelSteps: 1
   });
@@ -227,6 +243,8 @@ async function buildCheckReport(cwd, options = {}) {
   const sandbox = museStatus.available ? getWindowsSandboxStatus(cwd, { runtime }) : { checked: false, ready: true, detail: "not applicable" };
   const catalog = museStatus.available ? readModelCatalog({ runtime }) : [];
   const defaultModel = catalog.find((row) => row.isDefault) ?? null;
+  const selection = resolveModelSelection(options.model, process.env);
+  const selectedNote = catalog.find((row) => row.id === selection.model)?.description ?? null;
   const models = {
     available: catalog.map((row) => row.id),
     default: defaultModel?.id ?? null,
@@ -235,13 +253,21 @@ async function buildCheckReport(cwd, options = {}) {
     detail:
       catalog.length === 0
         ? "catalog not cached yet (populated after Muse's first run); pass --model to choose explicitly"
-        : `${catalog.map((row) => (row.isDefault ? `${row.id} (default)` : row.id)).join(", ")}${
+        : `${catalog.map((row) => (row.isDefault ? `${row.id} (Muse default)` : row.id)).join(", ")}${
             defaultModel?.description ? ` — note: ${defaultModel.description}` : ""
-          }`
+          }`,
+    // What the bridge will actually pass as --model, and why.
+    selected: {
+      id: selection.model,
+      source: selection.source,
+      requested: selection.requested,
+      note: selectedNote,
+      detail: `${selection.model} (${describeModelSource(selection)})${selectedNote ? `; note: ${selectedNote}` : ""}`
+    }
   };
 
   if (options.probe && museStatus.available && authStatus.loggedIn) {
-    const probe = await runAuthProbe(workspaceRoot);
+    const probe = await runAuthProbe(workspaceRoot, selection.model);
     authStatus.verified = probe.verified;
     authStatus.detail = `${authStatus.detail}; ${probe.detail}`;
     if (!probe.verified) {
@@ -293,8 +319,11 @@ async function buildCheckReport(cwd, options = {}) {
 
 async function handleCheck(argv) {
   const { options } = parseCommandInput(argv, {
-    valueOptions: ["cwd"],
-    booleanOptions: ["json", "probe", "enable-review-gate", "disable-review-gate"]
+    valueOptions: ["cwd", "model"],
+    booleanOptions: ["json", "probe", "enable-review-gate", "disable-review-gate"],
+    aliasMap: {
+      m: "model"
+    }
   });
 
   if (options["enable-review-gate"] && options["disable-review-gate"]) {
@@ -312,7 +341,7 @@ async function handleCheck(argv) {
     actionsTaken.push("Disabled the stop-time review gate for this repository.");
   }
 
-  const finalReport = await buildCheckReport(cwd, { actionsTaken, probe: options.probe });
+  const finalReport = await buildCheckReport(cwd, { actionsTaken, probe: options.probe, model: options.model });
   outputResult(options.json ? finalReport : renderSetupReport(finalReport), options.json);
 }
 

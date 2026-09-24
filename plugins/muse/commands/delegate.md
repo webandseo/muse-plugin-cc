@@ -47,7 +47,7 @@ Operating rules:
 - Do not paraphrase, summarize, rewrite, or add commentary before or after it.
 - Do not ask the subagent to inspect files, monitor progress, poll `/muse:runs`, fetch `/muse:show`, call `/muse:stop`, summarize output, or do follow-up work of its own.
 - Leave `--effort` unset unless the user explicitly asks for a specific reasoning effort.
-- Leave the model unset unless the user explicitly asks for one.
+- Leave the model unset unless the user explicitly asks for one. Without `--model` the bridge uses `MUSE_CC_MODEL`, or else `spark` (`muse-spark-1.3`), never Muse's contributor default.
 - Leave `--resume` and `--fresh` in the forwarded request. The subagent handles that routing when it builds the `run` command.
 - If the helper reports that Muse is missing or unauthenticated, stop and tell the user to run `/muse:check`.
 - If the user did not supply a request, ask what Muse should investigate or fix.

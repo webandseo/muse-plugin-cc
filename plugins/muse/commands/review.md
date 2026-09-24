@@ -36,7 +36,7 @@ Argument handling:
 - Do not strip `--wait` or `--background` yourself.
 - Do not add extra review instructions or rewrite the user's intent.
 - `--model` and `--effort` are runtime-selection flags. Preserve them for the bridge call; do not treat them as review focus text.
-- Leave `--model` and `--effort` unset unless the user explicitly asks for them. Accepted effort values: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, `ultra`.
+- Leave `--model` and `--effort` unset unless the user explicitly asks for them. Without `--model` the bridge uses `MUSE_CC_MODEL`, or else `spark` (`muse-spark-1.3`), never Muse's contributor default. Accepted effort values: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, `ultra`.
 - The bridge script parses `--wait` and `--background`. Bridge `--background` owns the long-running process group (detached `run-worker` + muse child). Claude Code's `Bash(..., run_in_background: true)` is only for the short enqueue call, not the long review process.
 - `/muse:review` does not support staged-only review, unstaged-only review, or extra focus text.
 - If the user needs a tougher design challenge pass, they should use `/muse:critique`.

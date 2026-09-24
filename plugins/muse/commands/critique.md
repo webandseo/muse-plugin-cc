@@ -39,7 +39,7 @@ Argument handling:
 - Do not strip `--wait` or `--background` yourself.
 - Do not weaken the critique framing or rewrite the user's focus text.
 - `--model` and `--effort` are runtime-selection flags. Preserve them for the bridge call; do not treat them as focus text.
-- Leave `--model` and `--effort` unset unless the user explicitly asks for them. Accepted effort values: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, `ultra`.
+- Leave `--model` and `--effort` unset unless the user explicitly asks for them. Without `--model` the bridge uses `MUSE_CC_MODEL`, or else `spark` (`muse-spark-1.3`), never Muse's contributor default. Accepted effort values: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, `ultra`.
 - The bridge script parses `--wait` and `--background`. Bridge `--background` owns the long-running process group (detached `run-worker` + muse child). Claude Code's `Bash(..., run_in_background: true)` is only for the short enqueue call, not the long critique process.
 - `/muse:critique` uses the same review target selection as `/muse:review`.
 - Unlike `/muse:review`, `/muse:critique` can still take extra focus text after the flags.
