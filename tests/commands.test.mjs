@@ -135,6 +135,14 @@ test("runtime skill only forwards run once and output skill forbids auto-fixing"
   assert.match(resultHandling, /Auto-applying fixes from a review is strictly forbidden/);
 });
 
+test("stop only reports the cancellation and forbids follow-up actions", () => {
+  const stop = read("commands/stop.md");
+  assert.match(stop, /Present the command output to the user/);
+  assert.match(stop, /do not start, restart, or resume[^\n]*run/i);
+  assert.match(stop, /do not continue or finish the cancelled task yourself/i);
+  assert.match(stop, /do not edit or revert files/i);
+});
+
 test("delegate forwarding uses a long Bash timeout, never re-runs run, and keeps --wait on the Claude side", () => {
   const surfaces = {
     agent: read("agents/muse-delegate.md"),
