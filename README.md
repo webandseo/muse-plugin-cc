@@ -155,9 +155,10 @@ Starts a Muse session that continues the current Claude Code conversation, and p
 ```text
 /muse:transfer
 /muse:transfer --source ~/.claude/projects/-Users-me-repo/<session-id>.jsonl
+/muse:transfer --model spark --effort medium
 ```
 
-The `SessionStart` hook records the current transcript path, so you rarely need `--source`. The bridge asks Muse to read the transcript with its bundled `resume-claude` skill, the same importer Muse uses for its own `/import`, so Muse works from the raw Claude Code JSONL. If that does not complete, or if you pass `--condensed`, the bridge instead seeds the session with a condensed transcript: thinking blocks dropped, tool calls reduced to one-line notes, oldest turns trimmed once the text passes 200 KB. Either way Muse answers with a short handoff note and the session is yours to continue. The source file must be under `~/.claude/projects`.
+The `SessionStart` hook records the current transcript path, so you rarely need `--source`. The bridge asks Muse to read the transcript with its bundled `resume-claude` skill, the same importer Muse uses for its own `/import`, so Muse works from the raw Claude Code JSONL. If that does not complete, or if you pass `--condensed`, the bridge instead seeds the session with a condensed transcript: thinking blocks dropped, tool calls reduced to one-line notes, oldest turns trimmed once the text passes 200 KB. Either way Muse answers with a short handoff note and the session is yours to continue. The source file must be under `~/.claude/projects`. `--model` (catalog id or alias) and `--effort` apply to the import turn and to the fallback; the effort defaults to `low` for transfers.
 
 ### `/muse:sync-skills`
 

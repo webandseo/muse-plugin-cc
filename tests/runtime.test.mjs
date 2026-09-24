@@ -750,6 +750,33 @@ test("transfer falls back to a condensed transcript when the native import yield
   assert.equal(JSON.parse(forced.stdout).mode, "condensed");
 });
 
+test("transfer forwards --model and --effort to the native import", () => {
+  const { repo, env, home, fakeLog } = setup();
+  const sessionPath = writeClaudeTranscript(home);
+  const result = bridge(["transfer", "--source", sessionPath, "--model", "spark-1.2", "--effort", "high", "--json"], repo, env);
+  assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
+  assert.doesNotMatch(result.stderr, /ignoring unknown option/);
+  assert.equal(JSON.parse(result.stdout).mode, "native");
+  const argvs = execArgvs(fakeLog);
+  assert.equal(argvs.length, 1);
+  assert.equal(argvs[0][argvs[0].indexOf("--model") + 1], "muse-spark-1.2");
+  assert.equal(argvs[0][argvs[0].indexOf("--reasoning-effort") + 1], "high");
+});
+
+test("transfer forwards --model and --effort to the condensed fallback too", () => {
+  const { repo, env, home, fakeLog } = setup({ scenario: "native-transfer-fails" });
+  const sessionPath = writeClaudeTranscript(home);
+  const result = bridge(["transfer", "--source", sessionPath, "--model", "contributor", "--effort", "medium", "--json"], repo, env);
+  assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
+  assert.equal(JSON.parse(result.stdout).mode, "condensed");
+  const argvs = execArgvs(fakeLog);
+  assert.equal(argvs.length, 2, "the native attempt, then the condensed fallback");
+  for (const argv of argvs) {
+    assert.equal(argv[argv.indexOf("--model") + 1], "muse-spark-1.3-contributor", argv.join(" "));
+    assert.equal(argv[argv.indexOf("--reasoning-effort") + 1], "medium", argv.join(" "));
+  }
+});
+
 test("transfer refuses transcripts outside ~/.claude/projects", () => {
   const { repo, env } = setup();
   const outside = path.join(makeTempDir(), "sess.jsonl");
