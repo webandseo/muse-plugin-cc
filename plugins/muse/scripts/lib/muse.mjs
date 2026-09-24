@@ -599,11 +599,18 @@ function normalizeWindowsText(text, hostCwd) {
   return mapDrivelessPathsToHost(stripExtendedPathPrefix(text), hostCwd);
 }
 
+export const FOREIGN_CONTEXT_ENV = "MUSE_CC_FOREIGN_CONTEXT";
+
 function buildExecArgs(options, paths) {
   const args = ["exec", "--json", "--prompt-file", paths.promptFile, "--session-id", options.sessionId];
   // Headless runs have no user to click Approve, so approval prompts must be
   // off. The read-only flags below are the actual safety boundary.
   args.push("--disable-approval", "--user-input-auto-resolve");
+  // Otherwise Muse loads the user's own Claude Code skills and personal rules
+  // (~/.claude) into every run the bridge makes and sends them with the prompt.
+  if (!options.foreignContext) {
+    args.push("--no-foreign-personal-context");
+  }
   if (!options.write) {
     args.push("--disable-write");
   }
@@ -682,7 +689,14 @@ export function runHeadlessAgent(cwd, options = {}) {
       }
       return absolute;
     });
-  const args = buildExecArgs({ ...options, sessionId }, { promptFile, schemaFile, imageFiles });
+  const args = buildExecArgs(
+    {
+      ...options,
+      sessionId,
+      foreignContext: options.foreignContext ?? env[FOREIGN_CONTEXT_ENV] === "1"
+    },
+    { promptFile, schemaFile, imageFiles }
+  );
   const launch = buildMuseLaunch(runtime, cwd, args, { env });
   const mapBack = (text) => (runtime.platform === "win32" ? normalizeWindowsText(text, cwd) : text);
 

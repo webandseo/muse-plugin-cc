@@ -246,6 +246,20 @@ test("runHeadlessAgent captures the final message and forwards read-only flags",
   assert.ok(events.some((event) => /Session ready/.test(event?.message)));
 });
 
+test("runHeadlessAgent keeps foreign personal context out unless MUSE_CC_FOREIGN_CONTEXT=1", async () => {
+  const binDir = makeTempDir();
+  const fake = installFakeMuse(binDir);
+  const cwd = makeTempDir();
+  const env = buildEnv(fake);
+  delete env.MUSE_CC_FOREIGN_CONTEXT;
+
+  const isolated = await runHeadlessAgent(cwd, { prompt: "check the thing", env });
+  assert.ok(isolated.args.includes("--no-foreign-personal-context"), isolated.args.join(" "));
+
+  const optedOut = await runHeadlessAgent(cwd, { prompt: "check the thing", env: { ...env, MUSE_CC_FOREIGN_CONTEXT: "1" } });
+  assert.ok(!optedOut.args.includes("--no-foreign-personal-context"), optedOut.args.join(" "));
+});
+
 test("runHeadlessAgent continues a given session id and passes schema, model, and effort", async () => {
   const binDir = makeTempDir();
   const fake = installFakeMuse(binDir);

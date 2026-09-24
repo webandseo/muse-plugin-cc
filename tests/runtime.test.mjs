@@ -46,6 +46,7 @@ function setup(options = {}) {
   delete env.XDG_CONFIG_HOME;
   delete env.XDG_DATA_HOME;
   delete env.MUSE_CC_SESSION_ID;
+  delete env.MUSE_CC_FOREIGN_CONTEXT;
   return { repo, binDir, pluginDataDir, home, fake, fakeLog, env };
 }
 
@@ -127,6 +128,39 @@ function seedTaskJob(repo, env, overrides = {}) {
     upsertJob(repo, job);
     return job;
   });
+}
+
+/**
+ * Drive every bridge path that launches `muse exec` (review, critique, a
+ * read-only and a write-capable run, transfer, check --probe, and the
+ * stop-review gate) and return the exec argv of each launch.
+ */
+function runEveryExecPath(context, extraEnv = {}) {
+  const { repo, env, home, fakeLog } = context;
+  const runEnv = { ...env, ...extraEnv };
+  const sessionPath = writeClaudeTranscript(home);
+  const commands = [
+    ["review"],
+    ["critique"],
+    ["run", "look around"],
+    ["run", "--write", "make the change"],
+    ["transfer", "--source", sessionPath],
+    ["check", "--probe"]
+  ];
+  for (const args of commands) {
+    const result = bridge(args, repo, runEnv);
+    assert.equal(result.status, 0, `${args.join(" ")}: ${result.stderr}`);
+  }
+  bridge(["check", "--enable-review-gate"], repo, runEnv);
+  const gate = runNode([path.join(PLUGIN_ROOT, "scripts", "stop-review-gate-hook.mjs")], {
+    cwd: repo,
+    env: runEnv,
+    input: JSON.stringify({ session_id: "s", cwd: repo, last_assistant_message: "Edited src.js" })
+  });
+  assert.equal(gate.status, 0, gate.stderr);
+  const argvs = execArgvs(fakeLog);
+  assert.equal(argvs.length, commands.length + 1, "one exec per command plus the stop gate");
+  return argvs;
 }
 
 function lastExecArgv(logPath) {
@@ -288,6 +322,25 @@ test("review and critique forward --model and --effort", () => {
     const argv = lastExecArgv(fakeLog);
     assert.equal(argv[argv.indexOf("--model") + 1], "muse-spark-1.3");
     assert.equal(argv[argv.indexOf("--reasoning-effort") + 1], "xhigh");
+  }
+});
+
+test("every muse exec the bridge launches passes --no-foreign-personal-context", () => {
+  for (const argv of runEveryExecPath(setup())) {
+    assert.ok(argv.includes("--no-foreign-personal-context"), argv.join(" "));
+  }
+});
+
+test("MUSE_CC_FOREIGN_CONTEXT=1 lets Muse load foreign personal context again", () => {
+  const { repo, env, fakeLog } = setup();
+  for (const args of [["review"], ["run", "--write", "make the change"]]) {
+    const result = bridge(args, repo, { ...env, MUSE_CC_FOREIGN_CONTEXT: "1" });
+    assert.equal(result.status, 0, result.stderr);
+  }
+  const argvs = execArgvs(fakeLog);
+  assert.equal(argvs.length, 2);
+  for (const argv of argvs) {
+    assert.ok(!argv.includes("--no-foreign-personal-context"), argv.join(" "));
   }
 });
 

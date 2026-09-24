@@ -238,6 +238,7 @@ Each run:
 
 - writes the prompt to a temp file and passes `--prompt-file`, so prompts never go through shell quoting;
 - passes `--disable-approval --user-input-auto-resolve`, because nobody is there to answer prompts; the read-only flags are what keep a review from changing anything;
+- passes `--no-foreign-personal-context`, so Muse does not load your own `~/.claude` skills and personal rules into runs made for Claude Code (without it they go to Meta with every prompt); `MUSE_CC_FOREIGN_CONTEXT=1` turns this off;
 - sets a `--session-id`, which is what `--resume` and `muse resume` rely on;
 - writes Muse's JSONL events to a per-run log, which is where `/muse:runs` gets the phase (thinking, reading files, running a command, editing, verifying).
 
@@ -283,6 +284,7 @@ If your Muse lives inside WSL, run Claude Code inside WSL as well (the `claude` 
 | `MUSE_BINARY` | Override for the `muse` executable |
 | `META_API_KEY` | Muse API key; takes priority over the `muse login` account |
 | `MUSE_CC_DISABLE_SANDBOX` | `1` passes `--disable-sandbox` to write-capable delegate runs on Windows (opt-in; see above) |
+| `MUSE_CC_FOREIGN_CONTEXT` | `1` stops passing `--no-foreign-personal-context`, so Muse loads your `~/.claude` skills and personal rules into bridge runs again (opt-out; off by default) |
 | `MUSE_CC_SESSION_ID` | Claude session id (set by the `SessionStart` hook) |
 | `MUSE_CC_TRANSCRIPT_PATH` | Claude transcript path (set by the `SessionStart` hook) |
 | `CLAUDE_PLUGIN_ROOT` | Plugin install root (host) |
