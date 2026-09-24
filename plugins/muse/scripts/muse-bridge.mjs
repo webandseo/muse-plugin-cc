@@ -37,6 +37,7 @@ import { createSessionWorktree, removeSessionWorktree } from "./lib/git.mjs";
 import {
   buildSingleJobSnapshot,
   buildStatusSnapshot,
+  claimWriteSlot,
   filterJobsForSession,
   getSessionRuntimeStatus,
   partitionActiveWriteRuns,
@@ -433,19 +434,20 @@ async function resolveLatestTrackedTaskThread(cwd, options = {}) {
 }
 
 /**
- * Two write-capable runs in one checkout edit the same files at once. Refuse
- * a new one while another is alive; retire records whose processes are gone
+ * Two write-capable runs in one checkout edit the same files at once. Record
+ * this run as queued unless another is alive, in one locked step so runs
+ * started together cannot both pass; retire records whose processes are gone
  * (a killed worker, a closed terminal) so they do not block forever.
  */
-function ensureNoConcurrentWriteRun(workspaceRoot) {
-  const { live, stale } = partitionActiveWriteRuns(sortJobsNewestFirst(listJobs(workspaceRoot)));
-  for (const job of stale) {
+function ensureNoConcurrentWriteRun(workspaceRoot, job) {
+  const { stale } = partitionActiveWriteRuns(sortJobsNewestFirst(listJobs(workspaceRoot)));
+  for (const staleJob of stale) {
     const errorMessage = "The run's bridge and Muse processes are no longer running; marked failed.";
-    appendLogLine(job.logFile, errorMessage);
-    claimJobTerminal(workspaceRoot, job.id, "failed", { errorMessage, phase: "failed", bridgePid: null });
+    appendLogLine(staleJob.logFile, errorMessage);
+    claimJobTerminal(workspaceRoot, staleJob.id, "failed", { errorMessage, phase: "failed", bridgePid: null });
   }
-  const active = live[0];
-  if (!active) {
+  const { claimed, active } = claimWriteSlot(workspaceRoot, job);
+  if (claimed) {
     return;
   }
   throw new Error(
@@ -1125,15 +1127,17 @@ async function handleTask(argv) {
     stopGate
   });
 
-  if (write && !options["allow-concurrent"]) {
-    ensureNoConcurrentWriteRun(workspaceRoot);
-  }
-
   if (options.background) {
     ensureMuseAvailable(cwd);
     requireTaskRequest(prompt, resumeLast);
+  }
 
-    const job = buildTaskJob(workspaceRoot, taskMetadata, write, stopGate);
+  const job = buildTaskJob(workspaceRoot, taskMetadata, write, stopGate);
+  if (write && !options["allow-concurrent"]) {
+    ensureNoConcurrentWriteRun(workspaceRoot, job);
+  }
+
+  if (options.background) {
     const request = {
       kind: "task",
       ...buildTaskRequest({
@@ -1155,7 +1159,6 @@ async function handleTask(argv) {
     return;
   }
 
-  const job = buildTaskJob(workspaceRoot, taskMetadata, write, stopGate);
   if (!options.json) {
     // If the caller's shell gives up on us (Claude Code's Bash tool backgrounds
     // a call after its timeout), this is how to find the run instead of
