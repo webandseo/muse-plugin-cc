@@ -5,13 +5,13 @@
   },
   "metadata": {
     "description": "Muse Code ↔ Claude Code bridge plugins for review, critique, delegation, and session transfer.",
-    "version": "0.2.0"
+    "version": "0.2.1"
   },
   "plugins": [
     {
       "name": "muse",
       "description": "Use Meta's Muse Code from Claude Code to review code or delegate tasks.",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "author": {
         "name": "rtravellin"
       },

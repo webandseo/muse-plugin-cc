@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.1
 
 - The one-write-run-per-repository guard is now atomic. The check and the new run's record happen under one state lock, so `run --write` calls started at the same moment can no longer all pass the check before any of them is recorded.
 - Backslashes survive slash-command arguments. A `\` escapes only a quote or whitespace, so Windows paths (`/muse:transfer --source C:\Users\...`, `/muse:delegate --image C:\...`, `\\server\share`) and prompt text such as `\d+` reach the bridge intact. They used to lose every backslash.
