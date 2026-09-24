@@ -88,6 +88,12 @@ function main() {
     return 2;
   }
 
+  // Keeps a run alive long enough for tests that race a second run against it.
+  const delayMs = Number(process.env.FAKE_MUSE_EXEC_DELAY_MS) || 0;
+  if (delayMs > 0) {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delayMs);
+  }
+
   const sessionId = flagValue("--session-id") ?? "01a0b50a-0000-7000-8000-000000000000";
   const promptFile = flagValue("--prompt-file");
   const prompt = promptFile ? fs.readFileSync(promptFile, "utf8") : (argv.find((a, i) => i > 0 && !a.startsWith("-")) ?? "");

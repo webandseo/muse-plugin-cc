@@ -1,7 +1,7 @@
 import fs from "node:fs";
 
 import { isProcessAlive } from "./process.mjs";
-import { getConfig, listJobs, readJobFile, resolveJobFile } from "./state.mjs";
+import { getConfig, listJobs, readJobFile, resolveJobFile, updateState } from "./state.mjs";
 import { resolveJobKillTargets, SESSION_ID_ENV } from "./tracked-jobs.mjs";
 import { resolveWorkspaceRoot } from "./workspace.mjs";
 
@@ -208,6 +208,24 @@ export function partitionActiveWriteRuns(jobs, options = {}) {
     (Number.isFinite(stamp) && now - stamp < UNSTARTED_RUN_GRACE_MS ? live : stale).push(job);
   }
   return { live, stale };
+}
+
+/**
+ * Record a write-capable run as queued unless another one is alive in this
+ * workspace. The check and the record share one state lock, so two bridges
+ * started at the same moment cannot both pass the check.
+ */
+export function claimWriteSlot(workspaceRoot, job, options = {}) {
+  let active = null;
+  updateState(workspaceRoot, (state) => {
+    active = partitionActiveWriteRuns(sortJobsNewestFirst(state.jobs), options).live[0] ?? null;
+    if (active) {
+      return;
+    }
+    const now = new Date().toISOString();
+    state.jobs.unshift({ createdAt: now, ...job, status: "queued", phase: "queued", updatedAt: now });
+  });
+  return { claimed: !active, active };
 }
 
 export function readStoredJob(workspaceRoot, jobId) {

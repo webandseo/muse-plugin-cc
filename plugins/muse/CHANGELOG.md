@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The one-write-run-per-repository guard is now atomic. The check and the new run's record happen under one state lock, so `run --write` calls started at the same moment can no longer all pass the check before any of them is recorded.
+
 ## 0.2.0
 
 This release is from the webandseo fork ([webandseo/muse-plugin-cc](https://github.com/webandseo/muse-plugin-cc)) of [rtravellin/muse-code-plugin-cc](https://github.com/rtravellin/muse-code-plugin-cc). The marketplace is now `webandseo-muse` (`/plugin install muse@webandseo-muse`); the plugin is still `muse`.

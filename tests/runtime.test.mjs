@@ -3,7 +3,7 @@ import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { buildEnv, installFakeAuth, installFakeModelCatalog, installFakeMuse } from "./fake-muse-fixture.mjs";
 import { commitFile, initGitRepo, makeTempDir, run, runNode, withEnv } from "./helpers.mjs";
@@ -77,6 +77,22 @@ function writeClaudeTranscript(home, name = "sess-transfer.jsonl") {
 
 function bridge(args, cwd, env) {
   return runNode([SCRIPT, ...args], { cwd, env });
+}
+
+function bridgeAsync(args, cwd, env) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [SCRIPT, ...args], { cwd, env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("error", reject);
+    child.on("close", (status) => resolve({ status, stdout, stderr }));
+  });
 }
 
 function execArgvs(logPath) {
@@ -492,6 +508,36 @@ test("run --write refuses to start while another write-capable run is alive", ()
     } catch {
     }
   }
+});
+
+test("run --write started several times at once lets exactly one through", async () => {
+  const { repo, env, fakeLog } = setup({ env: { FAKE_MUSE_EXEC_DELAY_MS: "5000" } });
+  // Preloaded into each bridge so all of them start at the same instant
+  // instead of being spread over node's startup time.
+  const barrier = path.join(makeTempDir(), "start-barrier.mjs");
+  fs.writeFileSync(
+    barrier,
+    "const wait = Number(process.env.RACE_START_AT) - Date.now();\nif (wait > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, wait);\n"
+  );
+  const raceEnv = { ...env, NODE_OPTIONS: `--import=${pathToFileURL(barrier).href}`, RACE_START_AT: String(Date.now() + 2000) };
+
+  const results = await Promise.all(
+    [0, 1, 2].map(() => bridgeAsync(["run", "--write", "--background", "--json", "make the change"], repo, raceEnv))
+  );
+  const accepted = results.filter((result) => result.status === 0);
+  assert.equal(accepted.length, 1, results.map((result) => `${result.status}: ${result.stderr}`).join("\n---\n"));
+  for (const refused of results.filter((result) => result.status !== 0)) {
+    assert.match(refused.stderr, /still (queued|running) with write access/);
+  }
+
+  const jobId = JSON.parse(accepted[0].stdout).jobId;
+  const waited = bridge(["runs", jobId, "--json", "--wait", "--timeout-ms", "30000"], repo, env);
+  assert.equal(waited.status, 0, waited.stderr);
+  assert.equal(JSON.parse(waited.stdout).job.status, "completed");
+  assert.equal(execArgvs(fakeLog).length, 1);
+  withEnv({ CLAUDE_PLUGIN_DATA: env.CLAUDE_PLUGIN_DATA }, () => {
+    assert.deepEqual(listJobs(repo).map((job) => job.id), [jobId]);
+  });
 });
 
 test("run --write retires a write-capable run whose processes are gone and starts", () => {
