@@ -89,21 +89,27 @@ export function parseArgs(argv, config = {}) {
   return { options, positionals, unknown };
 }
 
+function isEscapable(character) {
+  return character === "'" || character === "\"" || (character !== undefined && /\s/.test(character));
+}
+
+/**
+ * Split a slash command's "$ARGUMENTS" string. A backslash escapes only a
+ * quote or whitespace and is kept everywhere else, so Windows paths
+ * (C:\Users\..., \\server\share) and prompt text like \d+ arrive intact.
+ */
 export function splitRawArgumentString(raw) {
+  const characters = Array.from(raw);
   const tokens = [];
   let current = "";
   let quote = null;
-  let escaping = false;
 
-  for (const character of raw) {
-    if (escaping) {
-      current += character;
-      escaping = false;
-      continue;
-    }
+  for (let index = 0; index < characters.length; index += 1) {
+    const character = characters[index];
 
-    if (character === "\\") {
-      escaping = true;
+    if (character === "\\" && isEscapable(characters[index + 1])) {
+      current += characters[index + 1];
+      index += 1;
       continue;
     }
 
@@ -130,10 +136,6 @@ export function splitRawArgumentString(raw) {
     }
 
     current += character;
-  }
-
-  if (escaping) {
-    current += "\\";
   }
 
   if (current) {
