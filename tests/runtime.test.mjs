@@ -881,6 +881,15 @@ test("transfer uses Muse's native resume-claude import and prints the resume hin
   assert.match(rendered.stdout, /Turns imported: 3/);
 });
 
+test("transfer reads --source from one raw argument string, as slash commands pass it", () => {
+  const { repo, env, home } = setup();
+  const sessionPath = writeClaudeTranscript(home);
+  // On Windows the path is full of backslashes, which must survive the split.
+  const result = bridge(["transfer", `--source ${sessionPath} --json`], repo, env);
+  assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
+  assert.equal(JSON.parse(result.stdout).turnCount, 3);
+});
+
 test("transfer falls back to a condensed transcript when the native import yields nothing", () => {
   const { repo, env, home } = setup({ scenario: "native-transfer-fails" });
   const sessionPath = writeClaudeTranscript(home);
