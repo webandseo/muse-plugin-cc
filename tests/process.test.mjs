@@ -104,6 +104,20 @@ test("isProcessAlive still treats a POSIX zombie as dead", () => {
   assert.equal(isProcessAlive(4242, { platform: "linux", killImpl: () => {}, spawnSyncImpl: stat("Z") }), false);
 });
 
+test("isProcessAlive keeps a POSIX pid alive when ps cannot answer", () => {
+  // Signal 0 already found the process; a missing or failing ps (slim
+  // containers) must not turn that into "dead".
+  const missing = () => ({ status: null, stdout: "", stderr: "", error: Object.assign(new Error("spawnSync ps ENOENT"), { code: "ENOENT" }) });
+  const failing = () => ({ status: 1, stdout: "", stderr: "ps: unrecognized option: o", error: null });
+  const empty = () => ({ status: 0, stdout: "", stderr: "", error: null });
+  const throwing = () => {
+    throw new Error("spawn failed");
+  };
+  for (const spawnSyncImpl of [missing, failing, empty, throwing]) {
+    assert.equal(isProcessAlive(4242, { platform: "linux", killImpl: () => {}, spawnSyncImpl }), true);
+  }
+});
+
 test("formatCommandFailure summarizes exit and stderr", () => {
   const text = formatCommandFailure({ command: "git", args: ["status"], status: 128, signal: null, stderr: "fatal: nope", stdout: "" });
   assert.equal(text, "git status: exit=128: fatal: nope");

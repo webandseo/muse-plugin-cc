@@ -49,6 +49,15 @@ test("partitionActiveWriteRuns gives a run with no pid yet a short grace period"
   assert.deepEqual(stale.map((job) => job.id), ["run-old"]);
 });
 
+test("partitionActiveWriteRuns leaves worktree runs out: they edit their own checkout", () => {
+  const { live, stale } = partitionActiveWriteRuns(
+    [task("run-worktree", { worktree: true, bridgePid: 101 }), task("run-worktree-dead", { worktree: true, bridgePid: 998 })],
+    { isAlive: (pid) => pid === 101, now: NOW }
+  );
+  assert.deepEqual(live, []);
+  assert.deepEqual(stale, []);
+});
+
 function newRun(repo, id) {
   return { id, kind: "task", kindLabel: "delegate", title: "Muse Code Delegate", workspaceRoot: repo, jobClass: "task", summary: id, write: true };
 }

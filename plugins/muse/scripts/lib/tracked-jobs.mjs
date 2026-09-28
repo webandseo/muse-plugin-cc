@@ -185,6 +185,7 @@ export async function runTrackedJob(job, runner, options = {}) {
         jobClass: job.jobClass,
         summary: job.summary,
         write: job.write,
+        worktree: job.worktree,
         sessionId: job.sessionId
       });
       const recheck = patchJobIfActive(job.workspaceRoot, job.id, runningPatch);

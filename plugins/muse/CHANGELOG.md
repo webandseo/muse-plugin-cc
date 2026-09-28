@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- On POSIX a live process is only counted dead when `ps` reports it as a zombie. A missing or failing `ps` (slim containers) used to make `runs`, `show`, `stop`, resume and every `--wait` poll mark running runs failed and throw their results away.
+- `--worktree` runs are left out of the one-write-run guard both ways. They edit their own checkout under `.muse/worktrees/`, so `run --write --worktree` no longer waits for another write run, and a live worktree run no longer blocks a normal one.
+- A `stop` prefix that matches both a run that just ended and a live one is reported as ambiguous. It used to say the ended run "had already ended" and leave the live one running.
+
 ## 0.2.3
 
 - `stop <id>` on a run that already finished says `Run <id> is already completed; nothing to stop.` (or failed, or cancelled) and leaves the record as it was. It used to fail with `No run found for "<id>"`, as if the run did not exist. An id that matches no run still fails that way.

@@ -14,6 +14,7 @@ import {
   upsertJob,
   writeJobFile
 } from "../plugins/muse/scripts/lib/state.mjs";
+import { isProcessAlive } from "../plugins/muse/scripts/lib/process.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PLUGIN_ROOT = path.join(ROOT, "plugins", "muse");
@@ -660,6 +661,57 @@ test("stop on a run whose processes are gone says it had already ended", () => {
   assert.equal(text.status, 0, text.stderr);
   assert.match(text.stdout, /already ended/);
   assert.doesNotMatch(text.stdout, /may still be running/);
+});
+
+test("stop with a prefix matching both an ended and a live run is ambiguous", () => {
+  const { repo, env } = setup();
+  const bridgePid = startSleeper(repo);
+  try {
+    const deadPid = exitedPid();
+    seedTaskJob(repo, env, { id: "run-twin-dead", bridgePid: deadPid, pid: deadPid });
+    seedTaskJob(repo, env, { id: "run-twin-live", bridgePid, pid: bridgePid });
+
+    const result = bridge(["stop", "run-twin"], repo, env);
+    assert.notEqual(result.status, 0, result.stdout);
+    assert.match(result.stderr, /ambiguous/);
+    assert.doesNotMatch(result.stdout, /already ended/);
+    withEnv({ CLAUDE_PLUGIN_DATA: env.CLAUDE_PLUGIN_DATA }, () => {
+      assert.equal(listJobs(repo).find((job) => job.id === "run-twin-live").status, "running");
+    });
+    assert.equal(isProcessAlive(bridgePid), true, "the live run must not be stopped");
+  } finally {
+    try {
+      process.kill(bridgePid, "SIGKILL");
+    } catch {
+    }
+  }
+});
+
+test("run --write --worktree neither waits for nor blocks other write runs", () => {
+  const { repo, env, fakeLog } = setup();
+  const bridgePid = startSleeper(repo);
+  try {
+    const active = seedTaskJob(repo, env, { bridgePid, pid: bridgePid });
+    const isolated = bridge(["run", "--json", "--write", "--worktree", "isolated change"], repo, env);
+    assert.equal(isolated.status, 0, isolated.stderr);
+    withEnv({ CLAUDE_PLUGIN_DATA: env.CLAUDE_PLUGIN_DATA }, () => {
+      const recorded = listJobs(repo).find((job) => job.id !== active.id);
+      assert.equal(recorded.worktree, true, "the worktree flag is recorded on the run");
+    });
+
+    // A live worktree run leaves the checkout free for a normal write run.
+    withEnv({ CLAUDE_PLUGIN_DATA: env.CLAUDE_PLUGIN_DATA }, () => {
+      upsertJob(repo, { id: active.id, worktree: true });
+    });
+    const normal = bridge(["run", "--write", "edit the checkout"], repo, env);
+    assert.equal(normal.status, 0, normal.stderr);
+    assert.equal(execArgvs(fakeLog).length, 2);
+  } finally {
+    try {
+      process.kill(bridgePid, "SIGKILL");
+    } catch {
+    }
+  }
 });
 
 test("foreground run announces its run id for follow-up commands", () => {
