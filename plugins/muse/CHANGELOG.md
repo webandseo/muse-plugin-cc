@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.4
 
 - On POSIX a live process is only counted dead when `ps` reports it as a zombie. A missing or failing `ps` (slim containers) used to make `runs`, `show`, `stop`, resume and every `--wait` poll mark running runs failed and throw their results away.
 - `--worktree` runs are left out of the one-write-run guard both ways. They edit their own checkout under `.muse/worktrees/`, so `run --write --worktree` no longer waits for another write run, and a live worktree run no longer blocks a normal one.
