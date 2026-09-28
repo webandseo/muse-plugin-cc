@@ -729,7 +729,7 @@ function renderQueuedTaskLaunch(payload) {
   return `${payload.title} started in the background as ${payload.jobId}. Check /muse:runs ${payload.jobId} for progress.\n`;
 }
 
-function createBridgeJob({ prefix, kind, title, workspaceRoot, jobClass, summary, write = false }) {
+function createBridgeJob({ prefix, kind, title, workspaceRoot, jobClass, summary, write = false, worktree = false }) {
   return createJobRecord({
     id: generateJobId(prefix),
     kind,
@@ -738,7 +738,8 @@ function createBridgeJob({ prefix, kind, title, workspaceRoot, jobClass, summary
     workspaceRoot,
     jobClass,
     summary,
-    write
+    write,
+    worktree
   });
 }
 
@@ -754,7 +755,7 @@ function createTrackedProgress(job, options = {}) {
   };
 }
 
-function buildTaskJob(workspaceRoot, taskMetadata, write, stopGate = false) {
+function buildTaskJob(workspaceRoot, taskMetadata, write, stopGate = false, worktree = false) {
   return createBridgeJob({
     prefix: stopGate ? "gate" : "run",
     kind: stopGate ? STOP_GATE_KIND : "task",
@@ -762,7 +763,8 @@ function buildTaskJob(workspaceRoot, taskMetadata, write, stopGate = false) {
     workspaceRoot,
     jobClass: "task",
     summary: taskMetadata.summary,
-    write
+    write,
+    worktree
   });
 }
 
@@ -1130,8 +1132,8 @@ async function handleTask(argv) {
     requireTaskRequest(prompt, resumeLast);
   }
 
-  const job = buildTaskJob(workspaceRoot, taskMetadata, write, stopGate);
-  if (write && !options["allow-concurrent"]) {
+  const job = buildTaskJob(workspaceRoot, taskMetadata, write, stopGate, worktree);
+  if (write && !worktree && !options["allow-concurrent"]) {
     ensureNoConcurrentWriteRun(workspaceRoot, job);
   }
 
@@ -1402,7 +1404,10 @@ function findRunByReference(jobs, reference) {
     return exact;
   }
   const prefixMatches = jobs.filter((job) => job.id.startsWith(reference));
-  return prefixMatches.length === 1 ? prefixMatches[0] : null;
+  if (prefixMatches.length > 1) {
+    throw new Error(`Run reference "${reference}" is ambiguous. Use a longer run id.`);
+  }
+  return prefixMatches[0] ?? null;
 }
 
 async function handleCancel(argv) {
@@ -1413,7 +1418,13 @@ async function handleCancel(argv) {
 
   const cwd = resolveCommandCwd(options);
   const reference = positionals[0] ?? "";
-  const ended = findRunByReference(retireDeadRuns(resolveWorkspaceRoot(cwd)), reference);
+  const workspaceRoot = resolveWorkspaceRoot(cwd);
+  const retired = retireDeadRuns(workspaceRoot);
+  // Match live runs too, so a prefix shared by a just-ended run and a live
+  // one is ambiguous instead of silently picking the ended one.
+  const liveRuns = listJobs(workspaceRoot).filter((job) => isActiveJobStatus(job.status));
+  const match = findRunByReference([...retired, ...liveRuns], reference);
+  const ended = retired.includes(match) ? match : null;
   if (ended) {
     const payload = {
       jobId: ended.id,
@@ -1430,7 +1441,7 @@ async function handleCancel(argv) {
     );
     return;
   }
-  const { workspaceRoot, job, finished } = resolveCancelableJob(cwd, reference, { env: process.env });
+  const { job, finished } = resolveCancelableJob(cwd, reference, { env: process.env });
   if (finished) {
     const payload = {
       jobId: job.id,

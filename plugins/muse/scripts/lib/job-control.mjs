@@ -210,9 +210,13 @@ export function partitionActiveRuns(jobs, options = {}) {
   return { live, stale };
 }
 
+/**
+ * Write runs that edit the live checkout. Worktree runs edit their own
+ * checkout under .muse/worktrees/, so they neither block nor get blocked.
+ */
 export function partitionActiveWriteRuns(jobs, options = {}) {
   return partitionActiveRuns(
-    jobs.filter((job) => job.jobClass === "task" && job.write),
+    jobs.filter((job) => job.jobClass === "task" && job.write && !job.worktree),
     options
   );
 }

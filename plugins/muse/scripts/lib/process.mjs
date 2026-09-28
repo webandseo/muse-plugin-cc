@@ -70,6 +70,11 @@ function looksLikeMissingProcessMessage(text) {
   return /not found|no running instance|cannot find|does not exist|no such process/i.test(text);
 }
 
+/**
+ * Only asked once signal 0 has found the pid, so anything short of `ps`
+ * reporting a zombie state keeps it alive: a missing or failing `ps` (slim
+ * containers) says nothing about the process.
+ */
 function isZombieProcess(pid, spawnSyncImpl = spawnSync) {
   try {
     const result = spawnSyncImpl("ps", ["-p", String(pid), "-o", "stat="], {
@@ -77,13 +82,9 @@ function isZombieProcess(pid, spawnSyncImpl = spawnSync) {
       windowsHide: true
     });
     if (result.error || result.status !== 0) {
-      return true;
+      return false;
     }
-    const stat = String(result.stdout ?? "").trim();
-    if (!stat) {
-      return true;
-    }
-    return /\bZ\b|^Z/i.test(stat) || stat.toUpperCase().includes("Z");
+    return String(result.stdout ?? "").toUpperCase().includes("Z");
   } catch {
     return false;
   }
