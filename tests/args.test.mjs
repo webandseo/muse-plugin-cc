@@ -45,7 +45,11 @@ test("splitRawArgumentString keeps backslashes in Windows paths", () => {
     "is",
     "wrong"
   ]);
-  assert.deepEqual(splitRawArgumentString(String.raw`--source \server\share\s.jsonl`), ["--source", String.raw`\server\share\s.jsonl`]);
+  // A UNC path starts with two backslashes; built from the char code so the
+  // pair cannot be collapsed by an editor or shell on the way into this file.
+  const unc = String.fromCharCode(92).repeat(2) + String.raw`server\share\s.jsonl`;
+  assert.equal(unc.lastIndexOf(String.fromCharCode(92).repeat(2)), 0);
+  assert.deepEqual(splitRawArgumentString(`--source ${unc}`), ["--source", unc]);
 });
 
 test("splitRawArgumentString keeps backslashes in prompt text", () => {
