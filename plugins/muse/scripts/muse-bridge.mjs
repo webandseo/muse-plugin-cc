@@ -642,6 +642,7 @@ async function executeTaskRun(request) {
     result = await runHeadlessAgent(workspaceRoot, {
       prompt,
       sessionId,
+      resume: Boolean(resumeSessionId) && sessionId === resumeSessionId,
       model: request.model,
       effort: request.effort,
       write,

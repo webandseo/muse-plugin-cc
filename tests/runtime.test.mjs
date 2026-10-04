@@ -768,6 +768,27 @@ test("run --resume-last continues the previous delegate session id", () => {
   assert.equal(argv[argv.indexOf("--session-id") + 1], firstThread);
 });
 
+test("run --resume-last keeps the session's model unless --model is given", () => {
+  const { repo, env, fakeLog } = setup();
+  const first = bridge(["run", "--model", "contributor", "first task"], repo, env);
+  assert.equal(first.status, 0, first.stderr);
+
+  // Muse keeps a session's model when --model is omitted, so neither the
+  // plugin default nor MUSE_CC_MODEL may switch it on resume.
+  for (const extraEnv of [{}, { MUSE_CC_MODEL: "spark" }]) {
+    const resumed = bridge(["run", "--resume-last", "continue"], repo, { ...env, ...extraEnv });
+    assert.equal(resumed.status, 0, resumed.stderr);
+    const argv = lastExecArgv(fakeLog);
+    assert.ok(argv.includes("--session-id"), argv.join(" "));
+    assert.ok(!argv.includes("--model"), argv.join(" "));
+  }
+
+  const switched = bridge(["run", "--resume-last", "--model", "spark-1.2", "continue"], repo, env);
+  assert.equal(switched.status, 0, switched.stderr);
+  const argv = lastExecArgv(fakeLog);
+  assert.equal(argv[argv.indexOf("--model") + 1], "muse-spark-1.2", "an explicit --model still applies on resume");
+});
+
 test("run --resume-last continues a delegate run whose processes died mid-run", () => {
   const { repo, env, fakeLog } = setup();
   const deadPid = exitedPid();

@@ -678,7 +678,8 @@ function buildExecArgs(options, paths) {
 
 /**
  * Run one headless Muse turn (`muse exec --json`) in `cwd` and collect the
- * final answer. Pass `sessionId` to continue an earlier headless session.
+ * final answer. Pass `sessionId` to continue an earlier headless session,
+ * with `resume: true` so the session keeps its model unless one is given.
  */
 export function runHeadlessAgent(cwd, options = {}) {
   const env = options.env ?? process.env;
@@ -714,7 +715,9 @@ export function runHeadlessAgent(cwd, options = {}) {
     {
       ...options,
       sessionId,
-      model: resolveModelSelection(options.model, env).model,
+      // Muse keeps a resumed session's model when --model is omitted, so the
+      // plugin default only applies to new sessions.
+      model: options.resume ? normalizeRequestedModel(options.model) : resolveModelSelection(options.model, env).model,
       foreignContext: options.foreignContext ?? env[FOREIGN_CONTEXT_ENV] === "1"
     },
     { promptFile, schemaFile, imageFiles }

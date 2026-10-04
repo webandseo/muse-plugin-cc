@@ -146,7 +146,7 @@ Ask Muse to redesign the database connection to be more resilient.
 - `--worktree` runs Muse in its own git worktree: the bridge runs `git worktree add` for a branch named `muse/session-<id>` under `.muse/worktrees/`, hands it to Muse, and leaves it in place afterwards. Your checkout is untouched. The result prints the worktree path and the `diff`, `merge`, and discard commands for it. `--worktree-base <ref>` branches from something other than `HEAD`.
 - `--image <path>` attaches a screenshot or other image.
 - One write-capable delegate run at a time per repository checkout: while one is still alive, a second is refused with the run id to follow (`/muse:runs <id> --wait`) or stop (`/muse:stop <id>`). A record whose processes have died is marked failed instead of blocking. `--allow-concurrent` starts a second one anyway. `--worktree` runs edit their own checkout, so they neither wait for nor block other write runs.
-- `--model` takes a catalog id or one of the aliases `spark` (`muse-spark-1.3`), `contributor` (`muse-spark-1.3-contributor`), and `spark-1.2`. Without it the run uses `MUSE_CC_MODEL`, or else `spark`.
+- `--model` takes a catalog id or one of the aliases `spark` (`muse-spark-1.3`), `contributor` (`muse-spark-1.3-contributor`), and `spark-1.2`. Without it a new run uses `MUSE_CC_MODEL`, or else `spark`; `--resume` keeps the model the session started with unless you pass `--model`.
 - Every finished delegate run ends with a `muse resume <session-id>` line so you can pick the session up in Muse's own TUI; `/muse:runs` and `/muse:show` print it for reviews too.
 
 ### `/muse:transfer`
@@ -242,7 +242,7 @@ Each run:
 - writes the prompt to a temp file and passes `--prompt-file`, so prompts never go through shell quoting;
 - passes `--disable-approval --user-input-auto-resolve`, because nobody is there to answer prompts; the read-only flags are what keep a review from changing anything;
 - passes `--no-foreign-personal-context`, so Muse does not load your own `~/.claude` skills and personal rules into runs made for Claude Code (without it they go to Meta with every prompt); `MUSE_CC_FOREIGN_CONTEXT=1` turns this off;
-- always passes `--model`: the one you gave, else `MUSE_CC_MODEL`, else `spark` (`muse-spark-1.3`), so a run never lands on Muse's contributor default by omission;
+- passes `--model` on every new session: the one you gave, else `MUSE_CC_MODEL`, else `spark` (`muse-spark-1.3`), so a run never lands on Muse's contributor default by omission. A resumed session only gets `--model` when you give one, since Muse keeps the session's model otherwise;
 - sets a `--session-id`, which is what `--resume` and `muse resume` rely on;
 - writes Muse's JSONL events to a per-run log, which is where `/muse:runs` gets the phase (thinking, reading files, running a command, editing, verifying).
 
@@ -270,7 +270,7 @@ Each run:
 
 Two limits worth knowing before you rely on it. Reviews are a prompt the bridge sends, not a reviewer Muse ships, so their shape depends on the model rather than on a fixed command. And Muse's cross-session messaging refuses headless runs (`external_agent_ingress_closed`), so there is no way to redirect a turn while it is running; `/muse:stop` ends the process instead.
 
-To change the default model for the plugin, set `MUSE_CC_MODEL` (an alias such as `spark` or `contributor`, or a full catalog id); the plugin always passes `--model`, so the `model` key in Muse's `settings.json` does not apply to its runs. The default effort still comes from Muse's `settings.json` (`reasoning_effort`) unless you pass `--effort`.
+To change the default model for the plugin, set `MUSE_CC_MODEL` (an alias such as `spark` or `contributor`, or a full catalog id); the plugin passes `--model` on every new session, so the `model` key in Muse's `settings.json` does not apply to its runs. The default effort still comes from Muse's `settings.json` (`reasoning_effort`) unless you pass `--effort`.
 
 ## Windows
 
@@ -287,7 +287,7 @@ If your Muse lives inside WSL, run Claude Code inside WSL as well (the `claude` 
 | --- | --- |
 | `MUSE_BINARY` | Override for the `muse` executable |
 | `META_API_KEY` | Muse API key; takes priority over the `muse login` account |
-| `MUSE_CC_MODEL` | Model for runs without `--model`: an alias (`spark`, `contributor`, `spark-1.2`) or a full catalog id. Unset means `spark` (`muse-spark-1.3`); the plugin never falls through to Muse's `muse-spark-1.3-contributor` default |
+| `MUSE_CC_MODEL` | Model for new runs without `--model`: an alias (`spark`, `contributor`, `spark-1.2`) or a full catalog id. Unset means `spark` (`muse-spark-1.3`); the plugin never falls through to Muse's `muse-spark-1.3-contributor` default |
 | `MUSE_CC_DISABLE_SANDBOX` | `1` passes `--disable-sandbox` to write-capable delegate runs on Windows (opt-in; see above) |
 | `MUSE_CC_FOREIGN_CONTEXT` | `1` stops passing `--no-foreign-personal-context`, so Muse loads your `~/.claude` skills and personal rules into bridge runs again (opt-out; off by default) |
 | `MUSE_CC_SESSION_ID` | Claude session id (set by the `SessionStart` hook) |
