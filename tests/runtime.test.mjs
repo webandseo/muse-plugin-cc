@@ -593,6 +593,40 @@ test("stop on a run whose processes are gone says it had already ended", () => {
   assert.equal(text.status, 0, text.stderr);
   assert.match(text.stdout, /already ended/);
   assert.doesNotMatch(text.stdout, /may still be running/);
+  assert.match(text.stdout, /- Mode: write-capable/);
+});
+
+test("stop reports whether the run was write-capable and in a worktree", () => {
+  const { repo, env } = setup();
+  const ghost = (overrides) => {
+    const deadPid = exitedPid();
+    return seedTaskJob(repo, env, { bridgePid: deadPid, pid: deadPid, agentPid: exitedPid(), ...overrides });
+  };
+
+  const inWorktree = ghost({ write: true, worktree: true });
+  const json = bridge(["stop", inWorktree.id, "--json"], repo, env);
+  assert.equal(json.status, 0, json.stderr);
+  const payload = JSON.parse(json.stdout);
+  assert.equal(payload.write, true);
+  assert.equal(payload.worktree, true);
+
+  const readOnly = ghost({ write: false });
+  const text = bridge(["stop", readOnly.id], repo, env);
+  assert.equal(text.status, 0, text.stderr);
+  assert.match(text.stdout, /- Mode: read-only/);
+
+  const bridgePid = startSleeper(repo);
+  try {
+    const live = seedTaskJob(repo, env, { bridgePid, pid: bridgePid, write: true, worktree: true });
+    const stopped = bridge(["stop", live.id], repo, env);
+    assert.equal(stopped.status, 0, stopped.stderr);
+    assert.match(stopped.stdout, /- Mode: write-capable, in its own worktree/);
+  } finally {
+    try {
+      process.kill(bridgePid, "SIGKILL");
+    } catch {
+    }
+  }
 });
 
 test("stop with a prefix matching both an ended and a live run is ambiguous", () => {

@@ -195,7 +195,7 @@ Shows the stored output of a finished run, including the Muse session ID.
 
 ### `/muse:stop`
 
-Stops a background run by terminating the bridge worker and the `muse` process tree.
+Stops a background run by terminating the bridge worker and the `muse` process tree. The report says whether the run was read-only or write-capable, and for a `--worktree` run that any partial edits are in its worktree rather than the main working tree.
 
 ```text
 /muse:stop

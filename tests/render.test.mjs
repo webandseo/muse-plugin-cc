@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   renderCancelReport,
   renderReviewResult,
+  renderRunMode,
   renderStoredJobResult,
   renderTransferResult
 } from "../plugins/muse/scripts/lib/render.mjs";
@@ -66,4 +67,21 @@ test("renderCancelReport and renderTransferResult produce actionable text", () =
   assert.match(transfer, /Turns imported: 4 \(older turns trimmed to fit\)/);
   assert.match(transfer, /muse resume t-1/);
   assert.match(transfer, /Next: run tests\./);
+});
+
+test("renderCancelReport says whether the stopped run could edit files, and where", () => {
+  const write = renderCancelReport({ id: "run-1", write: true, worktree: false });
+  assert.match(write, /- Mode: write-capable/);
+  assert.match(write, /partial edits in the working tree/);
+
+  const worktree = renderCancelReport({ id: "run-2", write: true, worktree: true });
+  assert.match(worktree, /- Mode: write-capable, in its own worktree/);
+  assert.match(worktree, /not in the main working tree/);
+
+  const readOnly = renderCancelReport({ id: "run-3", write: false });
+  assert.match(readOnly, /- Mode: read-only/);
+  assert.doesNotMatch(readOnly, /partial edits/);
+
+  assert.equal(renderRunMode({ id: "run-4" }), null, "older records without the flag claim nothing");
+  assert.doesNotMatch(renderCancelReport({ id: "run-4" }), /Mode:/);
 });

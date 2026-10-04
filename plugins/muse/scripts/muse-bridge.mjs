@@ -70,6 +70,7 @@ import { resolveWorkspaceRoot } from "./lib/workspace.mjs";
 import {
   formatMuseResumeCommand,
   renderCancelReport,
+  renderRunMode,
   renderJobStatusReport,
   renderNativeReviewResult,
   renderReviewResult,
@@ -1401,13 +1402,16 @@ async function handleCancel(argv) {
       jobId: ended.id,
       status: ended.status,
       title: ended.title,
+      write: ended.write,
+      worktree: ended.worktree,
       killAttempted: false,
       killDelivered: false,
       alreadyTerminal: true
     };
+    const mode = renderRunMode(ended);
     outputCommandResult(
       payload,
-      `Run ${ended.id} had already ended: its bridge and Muse processes were no longer running, so it is marked failed. Nothing to stop.\n`,
+      `Run ${ended.id} had already ended: its bridge and Muse processes were no longer running, so it is marked failed. Nothing to stop.\n${mode ? `${mode}\n` : ""}`,
       options.json
     );
     return;
@@ -1433,6 +1437,8 @@ async function handleCancel(argv) {
       jobId: job.id,
       status: claim.status,
       title: claim.job?.title ?? job.title,
+      write: job.write,
+      worktree: job.worktree,
       killAttempted: killResult.attempted,
       killDelivered: killResult.delivered,
       alreadyTerminal: true,
@@ -1472,6 +1478,8 @@ async function handleCancel(argv) {
     jobId: job.id,
     status: "cancelled",
     title: job.title,
+    write: job.write,
+    worktree: job.worktree,
     killAttempted: killResult.attempted,
     killDelivered: killResult.delivered,
     killMethod: killResult.method,

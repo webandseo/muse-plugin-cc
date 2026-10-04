@@ -138,6 +138,7 @@ test("stop only reports the cancellation and forbids follow-up actions", () => {
   assert.match(stop, /do not start, restart, or resume[^\n]*run/i);
   assert.match(stop, /do not continue or finish the cancelled task yourself/i);
   assert.match(stop, /do not edit or revert files/i);
+  assert.match(stop, /`Mode:` line/, "the partial-edits warning keys off the report, not a guess");
 });
 
 test("delegate forwarding uses a long Bash timeout, never re-runs run, and keeps --wait on the Claude side", () => {

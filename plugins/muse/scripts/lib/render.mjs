@@ -423,6 +423,21 @@ export function renderStoredJobResult(job, storedJob) {
   return `${lines.join("\n").trimEnd()}\n`;
 }
 
+// Tells /muse:stop whether the run could have left edits, and where. Older
+// records without the flag get no line rather than a guess.
+export function renderRunMode(job) {
+  if (job.write === true && job.worktree) {
+    return "- Mode: write-capable, in its own worktree. Any partial edits are in that worktree (`git worktree list`), not in the main working tree.";
+  }
+  if (job.write === true) {
+    return "- Mode: write-capable. It may have left partial edits in the working tree.";
+  }
+  if (job.write === false) {
+    return "- Mode: read-only.";
+  }
+  return null;
+}
+
 export function renderCancelReport(job) {
   const delivered = job.cancelKill?.delivered ?? job.killDelivered;
   const lines = [
@@ -439,6 +454,10 @@ export function renderCancelReport(job) {
   }
   if (job.summary) {
     lines.push(`- Summary: ${job.summary}`);
+  }
+  const mode = renderRunMode(job);
+  if (mode) {
+    lines.push(mode);
   }
   if (delivered === false) {
     lines.push("- Kill delivered: false (process may still be running).");
