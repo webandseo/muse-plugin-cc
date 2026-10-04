@@ -569,6 +569,33 @@ test("stop on a run that already finished says so, and an unknown id still error
   assert.match(unknown.stderr, /No run found for "run-does-not-exist"/);
 });
 
+test("stop with a prefix matching both a finished and a live run is ambiguous", () => {
+  const { repo, env } = setup();
+  const bridgePid = startSleeper(repo);
+  try {
+    seedTaskJob(repo, env, { id: "run-pair-done", status: "completed", phase: "done" });
+    seedTaskJob(repo, env, { id: "run-pair-live", bridgePid, pid: bridgePid });
+
+    const result = bridge(["stop", "run-pair"], repo, env);
+    assert.notEqual(result.status, 0, result.stdout);
+    assert.match(result.stderr, /ambiguous/);
+    withEnv({ CLAUDE_PLUGIN_DATA: env.CLAUDE_PLUGIN_DATA }, () => {
+      assert.equal(listJobs(repo).find((job) => job.id === "run-pair-live").status, "running");
+    });
+    assert.equal(isProcessAlive(bridgePid), true, "the live run must not be stopped");
+
+    const exact = bridge(["stop", "run-pair-done"], repo, env);
+    assert.equal(exact.status, 0, exact.stderr);
+    assert.match(exact.stdout, /already completed; nothing to stop/);
+    assert.equal(isProcessAlive(bridgePid), true, "stopping the finished run leaves the live one alone");
+  } finally {
+    try {
+      process.kill(bridgePid, "SIGKILL");
+    } catch {
+    }
+  }
+});
+
 test("runs --wait notices when the run's processes die while it waits", async () => {
   const { repo, env } = setup();
   const bridgePid = startSleeper(repo);
