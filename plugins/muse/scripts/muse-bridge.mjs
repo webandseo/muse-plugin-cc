@@ -86,6 +86,7 @@ const DEFAULT_STATUS_WAIT_TIMEOUT_MS = 240000;
 const DEFAULT_STATUS_POLL_INTERVAL_MS = 2000;
 const REASONING_EFFORTS = new Set(VALID_REASONING_EFFORTS);
 const STOP_GATE_KIND = "stop-gate";
+const ARGS_STDIN_FLAG = "--args-stdin";
 
 function printUsage() {
   console.log(
@@ -136,6 +137,11 @@ function normalizeReasoningEffort(effort) {
 }
 
 function normalizeArgv(argv) {
+  // Slash commands pass $ARGUMENTS on stdin through a quoted heredoc, the one
+  // form where bash leaves quotes, $ and apostrophes in the text alone.
+  if (argv.includes(ARGS_STDIN_FLAG)) {
+    return [...argv.filter((arg) => arg !== ARGS_STDIN_FLAG), ...splitRawArgumentString(readStdinIfPiped())];
+  }
   if (argv.length === 1) {
     const [raw] = argv;
     if (!raw || !raw.trim()) {

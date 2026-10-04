@@ -56,6 +56,17 @@ test("splitRawArgumentString keeps backslashes in prompt text", () => {
   assert.deepEqual(splitRawArgumentString(String.raw`make \d+ match digits`), ["make", String.raw`\d+`, "match", "digits"]);
 });
 
-test("splitRawArgumentString still escapes quotes and whitespace", () => {
-  assert.deepEqual(splitRawArgumentString(String.raw`it\'s my\ dir "say \"hi\""`), ["it's", "my dir", `say "hi"`]);
+test("splitRawArgumentString still escapes a quote inside a word", () => {
+  assert.deepEqual(splitRawArgumentString(String.raw`it\'s "say \"hi\""`), ["it's", `say "hi"`]);
+});
+
+test("splitRawArgumentString keeps a backslash that ends a value", () => {
+  // String.raw cannot end on a backslash, so the trailing one is appended.
+  const bs = String.fromCharCode(92);
+  const pictures = String.raw`C:\Users\max\My Pictures` + bs;
+  const repo = String.raw`C:\repo` + bs;
+  assert.deepEqual(splitRawArgumentString(`--image "${pictures}" what is wrong`), ["--image", pictures, "what", "is", "wrong"]);
+  assert.deepEqual(splitRawArgumentString(`--cwd ${repo} --json`), ["--cwd", repo, "--json"]);
+  assert.deepEqual(splitRawArgumentString(`--cwd ${repo}`), ["--cwd", repo]);
+  assert.deepEqual(splitRawArgumentString(`--cwd "${repo}"`), ["--cwd", repo]);
 });

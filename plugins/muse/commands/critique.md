@@ -47,7 +47,9 @@ Argument handling:
 Foreground flow:
 - Run:
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/muse-bridge.mjs" critique "$ARGUMENTS"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/muse-bridge.mjs" critique --args-stdin <<'MUSE_CC_ARGS'
+$ARGUMENTS
+MUSE_CC_ARGS
 ```
 - Return the command stdout verbatim, exactly as-is.
 - Do not paraphrase, summarize, or add commentary before or after it.
@@ -58,7 +60,9 @@ Background flow:
 - Launch with `Bash` (Claude may still use `run_in_background: true` for the short enqueue call; the long-running work is the bridge `run-worker`):
 ```typescript
 Bash({
-  command: `node "${CLAUDE_PLUGIN_ROOT}/scripts/muse-bridge.mjs" critique --background "$ARGUMENTS"`,
+  command: `node "${CLAUDE_PLUGIN_ROOT}/scripts/muse-bridge.mjs" critique --background --args-stdin <<'MUSE_CC_ARGS'
+$ARGUMENTS
+MUSE_CC_ARGS`,
   description: "Muse Code critique",
   run_in_background: true
 })

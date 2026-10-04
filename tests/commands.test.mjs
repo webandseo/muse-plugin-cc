@@ -184,3 +184,15 @@ test("prompt templates only reference known placeholders", () => {
     }
   }
 });
+
+test("commands pass $ARGUMENTS to the bridge through a quoted heredoc, never inside double quotes", () => {
+  // Inside "..." bash expands $ and backticks, drops the user's quotes and
+  // breaks on a trailing backslash; '...' breaks on an apostrophe. A quoted
+  // heredoc leaves the text alone, and the bridge reads it with --args-stdin.
+  const heredoc = /--args-stdin <<'MUSE_CC_ARGS'\r?\n\$ARGUMENTS\r?\nMUSE_CC_ARGS/;
+  for (const name of ["critique", "review", "runs", "show", "stop", "sync-skills", "transfer"]) {
+    const command = read(`commands/${name}.md`);
+    assert.doesNotMatch(command, /"\$ARGUMENTS"/, name);
+    assert.match(command, heredoc, name);
+  }
+});

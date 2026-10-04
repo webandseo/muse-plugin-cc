@@ -89,14 +89,19 @@ export function parseArgs(argv, config = {}) {
   return { options, positionals, unknown };
 }
 
-function isEscapable(character) {
-  return character === "'" || character === "\"" || (character !== undefined && /\s/.test(character));
+// A backslash escapes a quote only inside a word (it\'s, \"hi\"). Before
+// whitespace or the end of input it ends a value instead, as in
+// "C:\My Pictures\" or C:\repo\, so it is kept and the quote still closes.
+function isEscapable(characters, index) {
+  const next = characters[index + 1];
+  const after = characters[index + 2];
+  return (next === "'" || next === "\"") && after !== undefined && !/\s/.test(after);
 }
 
 /**
- * Split a slash command's "$ARGUMENTS" string. A backslash escapes only a
- * quote or whitespace and is kept everywhere else, so Windows paths
- * (C:\Users\..., \\server\share) and prompt text like \d+ arrive intact.
+ * Split a slash command's $ARGUMENTS string. A backslash is kept everywhere
+ * except before a quote inside a word, so Windows paths (C:\Users\...,
+ * \\server\share, C:\repo\) and prompt text like \d+ arrive intact.
  */
 export function splitRawArgumentString(raw) {
   const characters = Array.from(raw);
@@ -107,7 +112,7 @@ export function splitRawArgumentString(raw) {
   for (let index = 0; index < characters.length; index += 1) {
     const character = characters[index];
 
-    if (character === "\\" && isEscapable(characters[index + 1])) {
+    if (character === "\\" && isEscapable(characters, index)) {
       current += characters[index + 1];
       index += 1;
       continue;

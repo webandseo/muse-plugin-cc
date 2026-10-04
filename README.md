@@ -277,6 +277,8 @@ Meta's PowerShell installer puts a `muse` batch shim in `%LOCALAPPDATA%\Programs
 - Its shell tool runs inside an OS sandbox that needs a one-time elevated setup: `muse sandbox windows setup` from an administrator PowerShell. Until then reviews work, since they never use the shell, but delegate runs cannot run commands and Muse reports `sandbox enforcement unavailable`. `/muse:check` shows the state. If you would rather skip the setup, `MUSE_CC_DISABLE_SANDBOX=1` makes write-capable delegate runs pass `--disable-sandbox`. The bridge never does that by itself.
 - It prints some paths without a drive letter or with a `\\?\` prefix; the bridge fixes them so file links work.
 
+Paths in slash-command arguments keep their backslashes, with two limits that come from Claude Code rather than the plugin: it turns `\\` into `\` before the command runs, so write a UNC path as `//server/share/...`; and it refuses to run a command whose arguments have a backslash right before a space or at the very end (write `C:\repo` rather than `C:\repo\`).
+
 If your Muse lives inside WSL, run Claude Code inside WSL as well (the `claude` CLI in a WSL terminal) and the plugin behaves exactly as on Linux. It does not bridge from a Windows session into WSL.
 
 ## Environment

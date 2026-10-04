@@ -5,4 +5,7 @@ disable-model-invocation: true
 allowed-tools: Bash(node:*)
 ---
 
-!`node "${CLAUDE_PLUGIN_ROOT}/scripts/muse-bridge.mjs" stop "$ARGUMENTS"`
+!`node "${CLAUDE_PLUGIN_ROOT}/scripts/muse-bridge.mjs" stop --args-stdin <<'MUSE_CC_ARGS'
+$ARGUMENTS
+MUSE_CC_ARGS
+`

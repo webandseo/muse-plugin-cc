@@ -998,6 +998,19 @@ test("transfer reads --source from one raw argument string, as slash commands pa
   assert.equal(JSON.parse(result.stdout).turnCount, 3);
 });
 
+test("--args-stdin reads the slash-command arguments from stdin, as the commands' heredoc passes them", () => {
+  const { repo, env, home } = setup();
+  const sessionPath = writeClaudeTranscript(home);
+  // The heredoc adds a trailing newline; quotes and backslashes arrive untouched.
+  const result = runNode([SCRIPT, "transfer", "--args-stdin"], { cwd: repo, env, input: `--source "${sessionPath}" --json\n` });
+  assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
+  assert.equal(JSON.parse(result.stdout).turnCount, 3);
+
+  const flagsFirst = runNode([SCRIPT, "runs", "--json", "--args-stdin"], { cwd: repo, env, input: "\n" });
+  assert.equal(flagsFirst.status, 0, flagsFirst.stderr);
+  assert.ok(Array.isArray(JSON.parse(flagsFirst.stdout).recent ?? []), "empty stdin means no extra arguments");
+});
+
 test("transfer falls back to a condensed transcript when the native import yields nothing", () => {
   const { repo, env, home } = setup({ scenario: "native-transfer-fails" });
   const sessionPath = writeClaudeTranscript(home);

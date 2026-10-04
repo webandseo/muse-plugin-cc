@@ -5,6 +5,9 @@ disable-model-invocation: true
 allowed-tools: Bash(node:*)
 ---
 
-!`node "${CLAUDE_PLUGIN_ROOT}/scripts/muse-bridge.mjs" transfer "$ARGUMENTS"`
+!`node "${CLAUDE_PLUGIN_ROOT}/scripts/muse-bridge.mjs" transfer --args-stdin <<'MUSE_CC_ARGS'
+$ARGUMENTS
+MUSE_CC_ARGS
+`
 
 Present the command output to the user exactly as returned. Preserve the Muse session ID and the `muse resume <session-id>` command. The bridge asks Muse to import the transcript with its bundled `resume-claude` skill and falls back to a condensed transcript if that does not complete; `--condensed` forces the fallback. `--model` (a catalog id or the aliases `spark`, `contributor`, `spark-1.2`) and `--effort` apply to both the native import and the fallback.
